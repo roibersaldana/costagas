@@ -1260,6 +1260,7 @@
             static set(key, value) {
                 const prev = Storage.get(key); // snapshot anterior para calcular eliminados
                 localStorage.setItem(key, JSON.stringify(value));
+                Storage._lastWrite[key] = Date.now(); // registrar tiempo de escritura local
                 if (_fbReady && _db) {
                     if (Storage._timers[key]) clearTimeout(Storage._timers[key]);
                     Storage._timers[key] = setTimeout(() => {
@@ -1333,6 +1334,7 @@
             }
         }
         Storage._timers = {}; // debounce timers por clave Firebase
+        Storage._lastWrite = {}; // timestamp de última escritura local por clave
 
         // ==================== INICIALIZACIÓN Y LISTENERS FIREBASE ====================
         async function initFirebase(config) {
@@ -1375,6 +1377,9 @@
                     let changed = false;
                     Object.keys(all).forEach(key => {
                         if (Storage._timers[key]) return; // hay escritura local pendiente, ignorar
+                        // Ignorar datos de Firebase si hubo escritura local en los últimos 3 segundos
+                        const lastWrite = Storage._lastWrite[key] || 0;
+                        if (Date.now() - lastWrite < 3000) return;
                         let incoming = all[key];
                         // Si Firebase devuelve un objeto con ids (no array nativo), convertir a array
                         if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
