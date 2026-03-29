@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>COSTA GAS - Sistema POS Seguro</title>
+    <!-- ✅ Firebase cargado primero en el <head> -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Russo+One&family=Rajdhani:wght@400;500;600;700&display=swap');
         
@@ -1210,15 +1213,17 @@
         </div>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    
     <script>
         // ==================== CONFIG FIREBASE ====================
-        // ⚠️ ARCHIVO DE DISTRIBUCIÓN — Firebase NO embebido.
-        // Al abrir en un dispositivo nuevo, el sistema pedirá el código de vinculación
-        // que contiene la configuración de Firebase encriptada.
-        const FIREBASE_EMBEDDED = null;
+        const FIREBASE_EMBEDDED = {
+            apiKey: "AIzaSyCpzDzR0tKGUZDg4cPfq0m90qFbhAxrO0I",
+            authDomain: "sistemachota-ef77e.firebaseapp.com",
+            databaseURL: "https://sistemachota-ef77e-default-rtdb.firebaseio.com",
+            projectId: "sistemachota-ef77e",
+            storageBucket: "sistemachota-ef77e.firebasestorage.app",
+            messagingSenderId: "453513097102",
+            appId: "1:453513097102:web:d768b500e5b27366577edf"
+        };
 
         // ==================== CONFIGURACIÓN FIREBASE ====================
         const CONFIG = {
@@ -1627,16 +1632,20 @@
         }
 
         (async function autoConnectFirebase() {
-            // Si el dispositivo ya está vinculado, reconectar Firebase en segundo plano
-            const saved = localStorage.getItem('_firebaseConfig');
-            if (saved) {
-                try { await initFirebase(JSON.parse(saved)); } catch(e) {}
-            } else if (FIREBASE_EMBEDDED && FIREBASE_EMBEDDED.apiKey) {
-                // Admin: config embebida → conectar pero NO marcar vinculado aún
-                // El admin debe hacer bypass explícito la primera vez
-                try { await initFirebase(FIREBASE_EMBEDDED); } catch(e) {}
+            // Si hay config embebida, conectar Y marcar vinculado automáticamente
+            // Esto evita la pantalla de vinculación en dispositivos nuevos
+            if (FIREBASE_EMBEDDED && FIREBASE_EMBEDDED.apiKey) {
+                try {
+                    await initFirebase(FIREBASE_EMBEDDED);
+                    localStorage.setItem('_deviceVinculado', 'true');
+                    localStorage.setItem('_firebaseConfig', JSON.stringify(FIREBASE_EMBEDDED));
+                } catch(e) {}
+            } else {
+                const saved = localStorage.getItem('_firebaseConfig');
+                if (saved) {
+                    try { await initFirebase(JSON.parse(saved)); } catch(e) {}
+                }
             }
-            // Mostrar la pantalla correcta según estado de vinculación
             mostrarPantallaInicio();
         })();
 
@@ -10320,147 +10329,34 @@
         });
     </script>
 
-<!-- 🔥 ULTRA PRO: TIEMPO REAL + SEGURIDAD -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import {
-  getFirestore, collection, addDoc, onSnapshot,
-  serverTimestamp, doc, getDoc, updateDoc, runTransaction
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+<!-- ✅ checkAdmin y checkConexion compatibles con el sistema principal -->
+<script>
+  // checkAdmin: usa el sistema de usuarios local (currentUser)
+  window.checkAdmin = function(){
+    if(typeof currentUser === 'undefined' || !currentUser || currentUser.role !== 'admin'){
+      alert("Acceso restringido. Solo administradores.");
+      return false;
+    }
+    return true;
+  };
 
-const firebaseConfig = {
-  apiKey: "TU_API_KEY",
-  authDomain: "TU_DOMINIO",
-  projectId: "TU_ID"
-};
+  // checkConexion: Firebase ya está siempre conectado con FIREBASE_EMBEDDED
+  window.checkConexion = function(){
+    return true;
+  };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-window.userRole = null;
-window.currentUserId = null;
-
-// 🔐 Obtener rol
-async function loadUserRole(uid){
-  const ref = doc(db, "usuarios", uid);
-  const snap = await getDoc(ref);
-  if(snap.exists()){
-    window.userRole = snap.data().rol;
-  }
-}
-
-// 🔐 sesión
-onAuthStateChanged(auth, async (user) => {
-  if(user){
-    window.currentUserId = user.uid;
-    await loadUserRole(user.uid);
-  }
-});
-
-// 🚫 admin check
-window.checkAdmin = function(){
-  if(window.userRole !== "admin"){
-    alert("Acceso restringido");
-    return false;
-  }
-  return true;
-}
-
-// 📊 auditoría
-window.auditLog = async function(accion){
-  if(!window.currentUserId) return;
-  await addDoc(collection(db, "auditoria"), {
-    usuario: window.currentUserId,
-    accion,
-    fecha: serverTimestamp()
-  });
-}
-
-// 🔄 TIEMPO REAL VENTAS
-window.escucharVentas = function(renderFn){
-  onSnapshot(collection(db, "ventas"), (snapshot)=>{
-    const data = [];
-    snapshot.forEach(doc=>{
-      data.push({id:doc.id, ...doc.data()});
-    });
-    renderFn(data);
-  });
-}
-
-// 💾 guardar venta segura
-window.guardarVenta = async function(data){
-  await addDoc(collection(db, "ventas"), {
-    ...data,
-    usuario: window.currentUserId,
-    fecha: serverTimestamp()
-  });
-  auditLog("venta creada");
-}
-
-// 📦 stock seguro con transacción
-window.actualizarStock = async function(id, cantidad){
-  const ref = doc(db, "stock", id);
-  await runTransaction(db, async (t)=>{
-    const snap = await t.get(ref);
-    if(!snap.exists()) throw "no existe";
-    const actual = snap.data().stock;
-    if(actual < cantidad) throw "stock insuficiente";
-    t.update(ref, { stock: actual - cantidad });
-  });
-  auditLog("stock actualizado");
-}
-</script>
-
-
-<!-- 🔐 SISTEMA FINAL: VINCULACIÓN POR CÓDIGO + SEGURIDAD -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// 🔒 SISTEMA INICIA DESCONECTADO
-let conectado = false;
-let db = null;
-let auth = null;
-
-// 🔑 VINCULAR CON CÓDIGO
-window.vincularSistema = async function(){
-  const codigo = prompt("Ingrese código de vinculación:");
-
-  if(!codigo) return;
-
-  // Simulación: el código es tu config codificada
-  if(codigo === "SALDANA2026"){
-
-    const firebaseConfig = {
-      apiKey: "TU_API_KEY",
-      authDomain: "TU_DOMINIO",
-      projectId: "TU_ID"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-
-    conectado = true;
-
-    alert("Sistema vinculado correctamente 🔥");
-
-  } else {
-    alert("Código incorrecto ❌");
-  }
-};
-
-// 🚫 BLOQUEAR SI NO ESTÁ VINCULADO
-window.checkConexion = function(){
-  if(!conectado){
-    alert("Sistema no vinculado. Ingrese código.");
-    return false;
-  }
-  return true;
-};
+  // auditLog compatible con Realtime Database
+  window.auditLog = function(accion){
+    if(_fbReady && _db){
+      try {
+        _db.ref('costagas/auditoria').push({
+          usuario: (typeof currentUser !== 'undefined' && currentUser) ? currentUser.nombre : 'sistema',
+          accion: accion,
+          fecha: new Date().toISOString()
+        });
+      } catch(e){}
+    }
+  };
 </script>
 
 <!-- 🎨 MEJORA DE BOTONES -->
@@ -10530,47 +10426,44 @@ button:hover {
 
 
 <!-- 🔥 CONTROL TOTAL: RESET + PROTECCIÓN ADMIN -->
-<script type="module">
-import { collection, getDocs, addDoc, deleteDoc, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// 🔐 CONTRASEÑA ADMIN DESDE FIREBASE
+<script>
+// 🔐 CONTRASEÑA ADMIN DESDE FIREBASE (Realtime Database)
 async function verificarAdminPassword() {
   const input = prompt("Ingrese contraseña de administrador:");
-
   if (!input) return false;
 
-  try {
-    const ref = doc(db, "config", "admin");
-    const snap = await getDoc(ref);
-
-    if (!snap.exists()) {
-      alert("No existe configuración admin");
-      return false;
+  // Verificar contra el usuario admin local
+  const usuarios = Storage.getArray('usuarios');
+  const adminUser = usuarios.find(u => u.role === 'admin');
+  if (!adminUser) {
+    // Fallback: verificar contra Firebase directamente
+    if (_fbReady && _db) {
+      try {
+        const snap = await _db.ref('costagas/config/admin').once('value');
+        const data = snap.val();
+        if (data && data.password) {
+          return input === data.password;
+        }
+      } catch(e) {}
     }
+    alert("No existe configuración admin");
+    return false;
+  }
 
-    const real = snap.data().password;
-
-    if (input === real) {
-      return true;
-    } else {
-      alert("Contraseña incorrecta");
-      return false;
-    }
-
-  } catch (e) {
-    alert("Error validando contraseña");
+  if (input === adminUser.password) {
+    return true;
+  } else {
+    alert("Contraseña incorrecta");
     return false;
   }
 }
 
 // 🔐 PROTECCIÓN GLOBAL
 window.protegerAccion = async function(){
-  if(!checkConexion()) return false;
-  if(!checkAdmin()) return false;
-
+  if(!window.checkConexion()) return false;
+  if(!window.checkAdmin()) return false;
   const ok = await verificarAdminPassword();
   if(!ok) return false;
-
   return true;
 };
 
@@ -10582,39 +10475,33 @@ window.resetSistemaTotal = async function(){
   if(!confirm("⚠️ Se eliminarán TODOS los datos. ¿Continuar?")) return;
 
   try {
-    // ✅ usuarios NUNCA se elimina en el reset
     const colecciones = ["ventas","stock","caja"];
     let respaldoTotal = {};
 
-    for(const col of colecciones){
-      const snap = await getDocs(collection(db, col));
-      respaldoTotal[col] = [];
-
-      snap.forEach(docu => {
-        respaldoTotal[col].push({ id: docu.id, ...docu.data() });
-      });
-    }
-
-    // 💾 guardar respaldo
-    await addDoc(collection(db, "respaldos"), {
-      tipo: "RESET_TOTAL",
-      fecha: new Date(),
-      datos: respaldoTotal
+    colecciones.forEach(col => {
+      respaldoTotal[col] = Storage.getArray(col);
     });
 
+    // 💾 guardar respaldo local
+    const respaldos = Storage.getArray('respaldos');
+    respaldos.push({
+      id: Date.now(),
+      tipo: "RESET_TOTAL",
+      fecha: new Date().toISOString(),
+      datos: respaldoTotal
+    });
+    Storage.set('respaldos', respaldos);
+
     // 🗑 eliminar datos
-    for(const col of colecciones){
-      for(const item of respaldoTotal[col]){
-        await deleteDoc(doc(db, col, item.id));
-      }
-    }
+    colecciones.forEach(col => {
+      Storage.set(col, []);
+    });
 
-    auditLog("RESET TOTAL EJECUTADO");
-
+    window.auditLog("RESET TOTAL EJECUTADO");
     alert("Sistema reiniciado correctamente 🔥");
 
   } catch(e){
-    alert("Error en reset");
+    alert("Error en reset: " + e.message);
     console.error(e);
   }
 };
