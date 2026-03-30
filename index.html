@@ -2756,7 +2756,7 @@
         function renderNuevoPedido() {
             const productos = Storage.getArray('productos');
             const clientes = Storage.getArray('clientes');
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             
             const content = `
                 <div class="module-header">
@@ -3916,7 +3916,7 @@
         // ==================== MÓDULO: USUARIOS ====================
         function renderUsuarios() {
             const usuarios = Storage.getArray('usuarios');
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             // Código actual
             const codigoData = Storage.get('dispositivoCodigo') || {};
             const codigoActivo = codigoData.code && codigoData.expira && Date.now() < codigoData.expira;
@@ -5318,7 +5318,7 @@
         function renderClientes() {
             const clientes = Storage.getArray('clientes');
             const creditos = Storage.getArray('creditos');
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const content = `
                 <div class="module-header">
                     <h2>CLIENTES</h2>
@@ -5599,7 +5599,7 @@
             // Poblar y auto-seleccionar trabajador
             const pdcTrab = document.getElementById('pdcTrabajador');
             if (pdcTrab) {
-                const trabList = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+                const trabList = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
                 pdcTrab.innerHTML = '<option value="">-- Seleccionar trabajador --</option>'
                     + trabList.map(t => `<option value="${t.id}" data-nombre="${t.nombre}" data-codigo="${t.codigo||''}">${t.codigo?'['+t.codigo+'] ':''}${t.nombre}</option>`).join('');
                 autoSelectTrabajadorEnSelect('pdcTrabajador');
@@ -5695,7 +5695,7 @@
         function registrarBalonVacio(clienteId) {
             const c = Storage.getArray('clientes').find(x => x.id === clienteId);
             const bv = c.balonesVacios || { b10: 0, b5: 0, b45: 0 };
-            const trabList = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabList = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             let modal = document.getElementById('modalBalonVacio');
             if (!modal) { modal = document.createElement('div'); modal.id = 'modalBalonVacio'; modal.className = 'modal'; document.body.appendChild(modal); }
             modal.innerHTML = `
@@ -5746,7 +5746,7 @@
         function devolverBalonVacio(clienteId) {
             const c = Storage.getArray('clientes').find(x => x.id === clienteId);
             const bv = c.balonesVacios || { b10: 0, b5: 0, b45: 0 };
-            const trabList = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabList = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             let modal = document.getElementById('modalBalonVacio');
             if (!modal) { modal = document.createElement('div'); modal.id = 'modalBalonVacio'; modal.className = 'modal'; document.body.appendChild(modal); }
             modal.innerHTML = `
@@ -6009,7 +6009,7 @@
             const productos = Storage.getArray('productos');
             const ss = 'width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:Rajdhani,sans-serif;';
             const totalCompras = compras.reduce((s,c) => s + c.monto, 0);
-            const pendientes = compras.filter(c => c.estadoPago === 'credito');
+            const pendientes = compras.filter(c => c && c.estadoPago === 'credito');
             const totalDeuda = pendientes.reduce((s,c) => s + (c.saldoPendiente||0), 0);
             const content = `
                 <div class="module-header">
@@ -6318,7 +6318,7 @@
             const totalGastos = gastos.reduce((s,g) => s + g.monto, 0);
             const totalHoy = gastosHoy.reduce((s,g) => s + g.monto, 0);
             const categorias = ['Combustible', 'Mantenimiento', 'Servicios', 'Sueldos', 'Alquiler', 'Otros'];
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const content = `
                 <div class="module-header">
                     <h2>GASTOS</h2>
@@ -6438,7 +6438,7 @@
             const ingresos = Storage.getArray('ingresos');
             const proveedores = Storage.getArray('proveedores');
             const productos = Storage.getArray('productos');
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const pendientes = ingresos.filter(i => i.estadoPago === 'credito');
             const totalDeuda = pendientes.reduce((s,i) => s + (i.saldoPendiente || 0), 0);
             const totalIngresos = ingresos.reduce((s,i) => s + i.total, 0);
@@ -6713,7 +6713,7 @@
             if (!ing) return;
             const proveedores = Storage.getArray('proveedores');
             const productos   = Storage.getArray('productos');
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const ss = 'width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;';
 
             // Crear modal dinámico
@@ -7164,8 +7164,8 @@
                 (c.usuario||'').toLowerCase() === (currentUser?.nombre||'').toLowerCase()
             );
             const clientes = Storage.getArray('clientes');
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
-            const pendientes = creditos.filter(c => c.estado === 'pendiente');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const pendientes = creditos.filter(c => c && c.estado === 'pendiente');
             const totalPendiente = pendientes.reduce((s,c) => s + c.saldo, 0);
             const content = `
                 <div class="module-header">
@@ -7347,7 +7347,7 @@
             // Poblar y auto-seleccionar trabajador
             const trabSel = document.getElementById('pcTrabajador');
             if (trabSel) {
-                const trabList = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+                const trabList = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
                 trabSel.innerHTML = '<option value="">-- Seleccionar trabajador --</option>'
                     + trabList.map(t => `<option value="${t.id}" data-nombre="${t.nombre}" data-codigo="${t.codigo||''}">${t.codigo?'['+t.codigo+'] ':''}${t.nombre}</option>`).join('');
                 autoSelectTrabajadorEnSelect('pcTrabajador');
@@ -7461,7 +7461,7 @@
             const trabajadores = Storage.getArray('trabajadores');
             const hoy = getCurrentDate();
             const ss = 'width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;';
-            const activos = trabajadores.filter(t => t.estado !== 'inactivo').length;
+            const activos = trabajadores.filter(t => t && t.estado !== 'inactivo').length;
             const content = `
                 <div class="module-header">
                     <h2>👷 TRABAJADORES</h2>
@@ -7840,7 +7840,7 @@
                 (i.usuarioId === currentUser?.id) ||
                 (i.usuario||'').toLowerCase() === (currentUser?.nombre||'').toLowerCase()
             );
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const hoy = getCurrentDate();
             const ss = 'width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;';
             const hoyReg  = ingresosCaja.filter(i => i.fecha.substring(0,10) === hoy);
@@ -10052,7 +10052,7 @@
         function editarPedido(id) {
             const p = Storage.getArray('pedidos').find(x => x.id === id);
             if (!p) return;
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t.estado !== 'inactivo');
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const itemsHtml = (p.items||[]).map((item, i) => `
                 <div style="display:grid;grid-template-columns:1fr 100px 70px 90px;gap:8px;align-items:center;background:#f9f9f9;border-radius:8px;padding:10px;margin-bottom:8px;border:1.5px solid #e0e0e0;">
                     <div style="font-weight:700;font-size:14px;color:#333;">${item.nombre}</div>
@@ -10242,8 +10242,8 @@
 
             const totalVentasHoy  = ventasHoy.reduce((sum, v) => sum + v.monto, 0);
             const totalCreditos   = esAdmin
-                ? creditos.filter(c => c.estado === 'pendiente').reduce((sum, c) => sum + c.saldo, 0)
-                : creditos.filter(c => c.estado === 'pendiente' && pedidosFiltrados.some(p => p.id === c.pedidoId)).reduce((sum, c) => sum + c.saldo, 0);
+                ? creditos.filter(c => c && c.estado === 'pendiente').reduce((sum, c) => sum + c.saldo, 0)
+                : creditos.filter(c => c && c.estado === 'pendiente' && pedidosFiltrados.some(p => p.id === c.pedidoId)).reduce((sum, c) => sum + c.saldo, 0);
             const stockBajo = productos.filter(p => p.stock <= p.stockMin).length;
 
             document.getElementById('ventasHoy').textContent     = totalVentasHoy.toFixed(2);
