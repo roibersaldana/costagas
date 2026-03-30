@@ -1382,8 +1382,10 @@
                         if (Date.now() - lastWrite < 3000) return;
                         let incoming = all[key];
                         // Si Firebase devuelve un objeto con ids (no array nativo), convertir a array
+                        // ✅ FIX: filtrar nulls — nodos eliminados en Firebase llegan como null
+                        // sin este filtro, productos eliminados "resucitan" desde otros dispositivos
                         if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
-                            incoming = Object.values(incoming);
+                            incoming = Object.values(incoming).filter(v => v !== null && v !== undefined);
                         }
                         const incomingStr = JSON.stringify(incoming);
                         const current = localStorage.getItem(key);
@@ -1413,7 +1415,7 @@
                 function fbNodoAArray(val) {
                     if (!val) return null;
                     if (Array.isArray(val)) return val;
-                    if (typeof val === 'object') return Object.values(val);
+                    if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
                     return val;
                 }
 
@@ -1478,27 +1480,49 @@
             }
         }
 
-        // Sube datos locales a Firebase — usa merge por item para no pisar otros dispositivos
+        // Sube datos locales a Firebase — respeta eliminaciones de la nube antes de subir
         function sincronizarDatosLocales() {
             if (!_fbReady || !_db) return;
-            const allKeys = [...DB_KEYS, ...Object.keys(localStorage).filter(k => k.startsWith('caja_u'))];
-            const updates = {};
-            allKeys.forEach(k => {
-                const local = Storage.get(k);
-                if (!local) return;
-                if (Array.isArray(local)) {
-                    local.forEach(item => {
-                        if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
-                    });
+            // Primero leer Firebase para saber qué fue eliminado por otros dispositivos
+            _db.ref('costagas').once('value').then(snap => {
+                const cloudData = snap.val() || {};
+                const allKeys = [...DB_KEYS, ...Object.keys(localStorage).filter(k => k.startsWith('caja_u'))];
+                const updates = {};
+                allKeys.forEach(k => {
+                    const local = Storage.get(k);
+                    if (!local) return;
+                    if (Array.isArray(local)) {
+                        const cloudNodo = cloudData[k] || {};
+                        // Solo subir items que YA EXISTEN en Firebase o son nuevos (creados offline)
+                        // NO subir items que Firebase ya eliminó (no están en cloudNodo y tampoco tienen _creadoOffline)
+                        const idsEnNube = new Set(Object.keys(cloudNodo).map(String));
+                        local.forEach(item => {
+                            if (item && item.id != null) {
+                                const idStr = String(item.id);
+                                // Subir si: existe en nube, o fue marcado como creado offline
+                                if (idsEnNube.has(idStr) || item._creadoOffline) {
+                                    updates[`costagas/${k}/${item.id}`] = item;
+                                }
+                            }
+                        });
+                        // Si la nube está vacía en esta clave (nunca hubo datos), subir todo
+                        if (idsEnNube.size === 0) {
+                            local.forEach(item => {
+                                if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
+                            });
+                        }
+                    } else {
+                        updates[`costagas/${k}`] = local;
+                    }
+                });
+                if (Object.keys(updates).length > 0) {
+                    _db.ref().update(updates)
+                        .then(() => showSyncBadge('online'))
+                        .catch(() => showSyncBadge('offline'));
                 } else {
-                    updates[`costagas/${k}`] = local;
+                    showSyncBadge('online');
                 }
-            });
-            if (Object.keys(updates).length > 0) {
-                _db.ref().update(updates)
-                    .then(() => showSyncBadge('online'))
-                    .catch(() => showSyncBadge('offline'));
-            }
+            }).catch(() => showSyncBadge('offline'));
         }
 
         // ✅ GUARDAR MANUALMENTE — fuerza subida a Firebase ahora mismo
@@ -1536,7 +1560,7 @@
                     function fbNodoAArray(val) {
                         if (!val) return null;
                         if (Array.isArray(val)) return val;
-                        if (typeof val === 'object') return Object.values(val);
+                        if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
                         return val;
                     }
                     DB_KEYS.forEach(k => {
@@ -1614,15 +1638,43 @@
         // ==================== CONTROL DE ACCESO INICIAL ====================
         // Muestra login si ya vinculado, o pantalla de vinculación si es nuevo
         function mostrarPantallaInicio() {
-            const yaVinculado = localStorage.getItem('_deviceVinculado') === 'true';
+            const yaVinculadoLocal = localStorage.getItem('_deviceVinculado') === 'true';
             const vc = document.getElementById('vincularContainer');
             const lc = document.getElementById('loginContainer');
-            if (yaVinculado) {
-                // Dispositivo autorizado → mostrar login
+            if (yaVinculadoLocal) {
+                // Dispositivo autorizado por localStorage → mostrar login
                 if (lc) lc.classList.add('active');
                 if (vc) vc.style.display = 'none';
+            } else if (_fbReady && _db) {
+                // ✅ No está en localStorage → verificar Firebase (puede que limpiaron el navegador)
+                const deviceId = getCurrentDeviceId();
+                _db.ref('costagas/dispositivosVinculados/' + deviceId).once('value').then(snap => {
+                    const data = snap.val();
+                    if (data && data.vinculado) {
+                        // Estaba vinculado en Firebase → restaurar y mostrar login
+                        localStorage.setItem('_deviceVinculado', 'true');
+                        if (lc) lc.classList.add('active');
+                        if (vc) vc.style.display = 'none';
+                    } else {
+                        // Dispositivo realmente nuevo → pantalla de vinculación
+                        if (vc) {
+                            vc.style.display = 'flex';
+                            const ta = document.getElementById('inputVincularObligatorio');
+                            if (ta) { ta.value = ''; setTimeout(() => ta.focus(), 100); }
+                            const errV = document.getElementById('vincularObligatorioError');
+                            if (errV) errV.style.display = 'none';
+                            const msgV = document.getElementById('vincularObligatorioMsg');
+                            if (msgV) msgV.style.display = 'none';
+                        }
+                        if (lc) lc.classList.remove('active');
+                    }
+                }).catch(() => {
+                    // Sin conexión → mostrar login de todas formas (no bloquear al usuario)
+                    if (lc) lc.classList.add('active');
+                    if (vc) vc.style.display = 'none';
+                });
             } else {
-                // Dispositivo NUEVO → bloquear en pantalla de vinculación
+                // Sin Firebase → mostrar pantalla de vinculación
                 if (vc) {
                     vc.style.display = 'flex';
                     const ta = document.getElementById('inputVincularObligatorio');
@@ -1774,7 +1826,53 @@
             if (user) {
                 // ✅ FIX: Admin nunca necesita verificación — solo vendedores en dispositivo nuevo
                 const deviceKey = 'trusted_device_' + (user.id || user.username);
-                const isTrusted = localStorage.getItem(deviceKey) === 'true';
+                // ✅ Verificar confianza: primero localStorage, luego Firebase como respaldo
+                const isTrustedLocal = localStorage.getItem(deviceKey) === 'true';
+                // Verificar en Firebase si no está en localStorage (por si limpiaron el navegador)
+                if (!isTrustedLocal && user.role !== 'admin' && _fbReady && _db) {
+                    const deviceId = getCurrentDeviceId();
+                    sessionStorage.setItem('pendingUser', JSON.stringify(user));
+                    sessionStorage.setItem('pendingUsername', username);
+                    sessionStorage.setItem('pendingPassword', password);
+                    const recordar2 = document.getElementById('recordarUsuario')?.checked;
+                    if (recordar2) {
+                        localStorage.setItem('_savedUsername', username);
+                        localStorage.setItem('_savedPassword', password);
+                        localStorage.setItem('_recordarLogin', '1');
+                    }
+                    // Verificar Firebase
+                    _db.ref('costagas/dispositivosConfiables/' + deviceId).once('value').then(snap => {
+                        const data = snap.val();
+                        if (data && data.userId == (user.id || user.username)) {
+                            // ✅ Estaba registrado en Firebase — restaurar en localStorage y continuar
+                            localStorage.setItem(deviceKey, 'true');
+                            localStorage.setItem('_deviceVinculado', 'true');
+                            const u = JSON.parse(sessionStorage.getItem('pendingUser') || 'null');
+                            if (u) {
+                                sessionStorage.removeItem('pendingUser');
+                                currentUser = u;
+                                sessionStorage.setItem('currentUser', JSON.stringify(u));
+                                if (!Storage.get(getCajaKey())) Storage.set(getCajaKey(), { estado: 'cerrada', montoInicial: 0, montoActual: 0 });
+                                document.getElementById('loginContainer').classList.remove('active');
+                                document.getElementById('appContainer').classList.add('active');
+                                document.getElementById('currentUser').textContent = u.nombre;
+                                registrarDispositivoActual(true);
+                                updateDashboard();
+                                applyRoleRestrictions();
+                                showNotification('✅ ¡Bienvenido ' + u.nombre + '!', 'success');
+                                setTimeout(() => abrirCajaSiCerrada(), 400);
+                            }
+                        } else {
+                            // No está en Firebase → pedir verificación normal
+                            mostrarVerificacionDispositivo();
+                        }
+                    }).catch(() => {
+                        // Sin conexión → pedir verificación normal
+                        mostrarVerificacionDispositivo();
+                    });
+                    return;
+                }
+                const isTrusted = isTrustedLocal;
                 if (!isTrusted && user.role !== 'admin') {
                     // Guardar usuario pendiente y mostrar pantalla de verificación
                     sessionStorage.setItem('pendingUser', JSON.stringify(user));
@@ -1896,26 +1994,45 @@
         function iniciarCountdownVerify() {
             if (window._verifyTimer) clearInterval(window._verifyTimer);
             const cdEl = document.getElementById('verifyCountdown');
-            function actualizar() {
-                const stored = Storage.get('dispositivoCodigo');
+
+            function mostrarCountdown(stored) {
                 if (!stored || !stored.code || !stored.expira) {
                     if (cdEl) cdEl.textContent = '⚠ No hay código activo — pide al administrador que genere uno.';
-                    clearInterval(window._verifyTimer);
-                    return;
+                    return false;
                 }
                 const restMs = stored.expira - Date.now();
                 if (restMs <= 0) {
                     if (cdEl) cdEl.innerHTML = '<span style="color:#f44336;font-weight:700;">⏰ El código expiró — pide uno nuevo al administrador.</span>';
-                    clearInterval(window._verifyTimer);
-                    return;
+                    return false;
                 }
                 const min = Math.floor(restMs / 60000);
                 const seg = Math.floor((restMs % 60000) / 1000);
                 const color = restMs < 60000 ? '#f44336' : '#2d5016';
                 if (cdEl) cdEl.innerHTML = `<span style="color:${color};font-weight:700;">⏱ Código válido por: ${min}:${String(seg).padStart(2,'0')}</span>`;
+                return true;
             }
-            actualizar();
-            window._verifyTimer = setInterval(actualizar, 1000);
+
+            // ✅ Leer de Firebase primero para el countdown también
+            if (_fbReady && _db) {
+                _db.ref('costagas/dispositivoCodigo').once('value').then(snap => {
+                    const storedFb = snap.val();
+                    const storedLocal = Storage.get('dispositivoCodigo');
+                    const stored = (storedFb && storedFb.code) ? storedFb : storedLocal;
+                    // Guardar en local para el tick del intervalo
+                    if (stored) localStorage.setItem('dispositivoCodigo', JSON.stringify(stored));
+                    mostrarCountdown(stored);
+                }).catch(() => {
+                    mostrarCountdown(Storage.get('dispositivoCodigo'));
+                });
+            } else {
+                mostrarCountdown(Storage.get('dispositivoCodigo'));
+            }
+
+            // Actualizar cada segundo usando localStorage (ya sincronizado arriba)
+            window._verifyTimer = setInterval(() => {
+                const stored = Storage.get('dispositivoCodigo');
+                if (!mostrarCountdown(stored)) clearInterval(window._verifyTimer);
+            }, 1000);
         }
 
         function cancelarVerificacion() {
@@ -1929,70 +2046,114 @@
             const errEl = document.getElementById('verifyError');
             errEl.style.display = 'none';
 
-            // Leer código guardado
-            const stored = Storage.get('dispositivoCodigo');
-            if (!stored || !stored.code) {
-                errEl.textContent = '⚠ No hay código generado. Pide al administrador que genere uno.';
+            if (!inputCode) {
+                errEl.textContent = '⚠ Ingresa el código de 6 dígitos.';
                 errEl.style.display = 'block';
                 return;
             }
-            // Verificar expiración (10 minutos)
-            const ahora = Date.now();
-            const expira = stored.expira || 0;
-            if (ahora > expira) {
-                errEl.textContent = '⏰ El código ha expirado. Pide al administrador uno nuevo.';
-                errEl.style.display = 'block';
-                return;
-            }
-            // Verificar código
-            if (inputCode !== String(stored.code)) {
-                errEl.textContent = '❌ Código incorrecto. Intenta de nuevo.';
-                errEl.style.display = 'block';
-                document.getElementById('verifyCodeInput').value = '';
-                document.getElementById('verifyCodeInput').focus();
-                return;
-            }
 
-            // ✅ Código correcto — marcar dispositivo como confiable
-            const pendingUser = JSON.parse(sessionStorage.getItem('pendingUser') || 'null');
-            if (!pendingUser) { cancelarVerificacion(); return; }
-
-            const deviceKey = 'trusted_device_' + (pendingUser.id || pendingUser.username);
-            localStorage.setItem(deviceKey, 'true');
-            sessionStorage.removeItem('pendingUser');
-
-            // ✅ NUEVO: verificar si el dispositivo ya está vinculado a la base de datos
-            const yaVinculado = localStorage.getItem('_deviceVinculado') === 'true';
-            if (!yaVinculado) {
-                // Guardar usuario para completar login tras vincular
-                sessionStorage.setItem('pendingUserVincular', JSON.stringify(pendingUser));
-                document.getElementById('verifyContainer').style.display = 'none';
-                const vc = document.getElementById('vincularContainer');
-                if (vc) {
-                    vc.style.display = 'flex';
-                    const ta = document.getElementById('inputVincularObligatorio');
-                    if (ta) { ta.value = ''; ta.focus(); }
-                    const errV = document.getElementById('vincularObligatorioError');
-                    if (errV) errV.style.display = 'none';
-                    const msgV = document.getElementById('vincularObligatorioMsg');
-                    if (msgV) msgV.style.display = 'none';
+            // ✅ FIX PRINCIPAL: Leer el código DIRECTAMENTE de Firebase
+            // El problema anterior era que se leía del localStorage del vendedor,
+            // que podía no estar sincronizado aún con el código generado por el admin.
+            function verificarConCodigo(stored) {
+                if (!stored || !stored.code) {
+                    errEl.textContent = '⚠ No hay código generado. Pide al administrador que genere uno.';
+                    errEl.style.display = 'block';
+                    return;
                 }
-                return;
+                const ahora = Date.now();
+                const expira = stored.expira || 0;
+                if (ahora > expira) {
+                    errEl.textContent = '⏰ El código ha expirado. Pide al administrador uno nuevo.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                if (inputCode !== String(stored.code)) {
+                    errEl.textContent = '❌ Código incorrecto. Intenta de nuevo.';
+                    errEl.style.display = 'block';
+                    document.getElementById('verifyCodeInput').value = '';
+                    document.getElementById('verifyCodeInput').focus();
+                    return;
+                }
+
+                // ✅ Código correcto — completar verificación
+                const pendingUser = JSON.parse(sessionStorage.getItem('pendingUser') || 'null');
+                if (!pendingUser) { cancelarVerificacion(); return; }
+
+                const deviceKey = 'trusted_device_' + (pendingUser.id || pendingUser.username);
+                localStorage.setItem(deviceKey, 'true');
+                // Guardar en Firebase para que persista aunque limpien el navegador
+                if (_fbReady && _db) {
+                    const deviceId = getCurrentDeviceId();
+                    _db.ref('costagas/dispositivosConfiables/' + deviceId).set({
+                        userId: pendingUser.id || pendingUser.username,
+                        deviceKey: deviceKey,
+                        fecha: new Date().toISOString()
+                    }).catch(() => {});
+                }
+                sessionStorage.removeItem('pendingUser');
+
+                const yaVinculado = localStorage.getItem('_deviceVinculado') === 'true';
+                if (!yaVinculado) {
+                    sessionStorage.setItem('pendingUserVincular', JSON.stringify(pendingUser));
+                    document.getElementById('verifyContainer').style.display = 'none';
+                    const vc = document.getElementById('vincularContainer');
+                    if (vc) {
+                        vc.style.display = 'flex';
+                        const ta = document.getElementById('inputVincularObligatorio');
+                        if (ta) { ta.value = ''; ta.focus(); }
+                        const errV = document.getElementById('vincularObligatorioError');
+                        if (errV) errV.style.display = 'none';
+                        const msgV = document.getElementById('vincularObligatorioMsg');
+                        if (msgV) msgV.style.display = 'none';
+                    }
+                    return;
+                }
+
+                currentUser = pendingUser;
+                sessionStorage.setItem('currentUser', JSON.stringify(pendingUser));
+                if (!Storage.get(getCajaKey())) {
+                    Storage.set(getCajaKey(), { estado: 'cerrada', montoInicial: 0, montoActual: 0 });
+                }
+                document.getElementById('verifyContainer').style.display = 'none';
+                document.getElementById('appContainer').classList.add('active');
+                document.getElementById('currentUser').textContent = pendingUser.nombre;
+                registrarDispositivoActual(true);
+                updateDashboard();
+                applyRoleRestrictions();
+                showNotification('✅ Dispositivo verificado. ¡Bienvenido ' + pendingUser.nombre + '!', 'success');
+                setTimeout(() => abrirCajaSiCerrada(), 400);
             }
 
-            // Completar login normalmente (ya vinculado)
-            currentUser = pendingUser;
-            sessionStorage.setItem('currentUser', JSON.stringify(pendingUser));
-            if (!Storage.get(getCajaKey())) {
-                Storage.set(getCajaKey(), { estado: 'cerrada', montoInicial: 0, montoActual: 0 });
+            // Intentar leer desde Firebase primero (fuente de verdad)
+            if (_fbReady && _db) {
+                errEl.textContent = '⏳ Verificando...';
+                errEl.style.display = 'block';
+                errEl.style.background = '#e3f2fd';
+                errEl.style.color = '#1565c0';
+                _db.ref('costagas/dispositivoCodigo').once('value').then(snap => {
+                    errEl.style.display = 'none';
+                    errEl.style.background = '';
+                    errEl.style.color = '';
+                    const storedFb = snap.val();
+                    if (storedFb && storedFb.code) {
+                        verificarConCodigo(storedFb);
+                    } else {
+                        // Firebase no tiene código → intentar localStorage como respaldo
+                        const storedLocal = Storage.get('dispositivoCodigo');
+                        verificarConCodigo(storedLocal);
+                    }
+                }).catch(() => {
+                    // Sin conexión → usar localStorage como respaldo
+                    errEl.style.display = 'none';
+                    const storedLocal = Storage.get('dispositivoCodigo');
+                    verificarConCodigo(storedLocal);
+                });
+            } else {
+                // Sin Firebase → usar localStorage
+                const storedLocal = Storage.get('dispositivoCodigo');
+                verificarConCodigo(storedLocal);
             }
-            document.getElementById('verifyContainer').style.display = 'none';
-            document.getElementById('appContainer').classList.add('active');
-            document.getElementById('currentUser').textContent = pendingUser.nombre;
-            updateDashboard();
-            applyRoleRestrictions();
-            showNotification('✅ Dispositivo verificado. ¡Bienvenido ' + pendingUser.nombre + '!', 'success');
-            setTimeout(() => abrirCajaSiCerrada(), 400);
         }
 
         function generarCodigoDispositivo() {
@@ -2028,8 +2189,13 @@
             Object.keys(localStorage).forEach(k => {
                 if (k.startsWith('trusted_device_')) localStorage.removeItem(k);
             });
-            // También revocar vinculación obligatoria
+            // También revocar vinculación obligatoria localmente
             localStorage.removeItem('_deviceVinculado');
+            // ✅ Borrar también en Firebase para que todos los dispositivos pierdan acceso
+            if (_fbReady && _db) {
+                _db.ref('costagas/dispositivosConfiables').remove().catch(() => {});
+                _db.ref('costagas/dispositivosVinculados').remove().catch(() => {});
+            }
             showNotification('✅ Todos los dispositivos han sido revocados', 'success');
         }
 
@@ -4876,8 +5042,15 @@
                 const ok = await initFirebase(config);
                 if (!ok) throw new Error('No se pudo conectar');
 
-                // ✅ Marcar dispositivo como vinculado permanentemente
+                // ✅ Marcar dispositivo como vinculado permanentemente (localStorage + Firebase)
                 localStorage.setItem('_deviceVinculado', 'true');
+                if (_fbReady && _db) {
+                    const deviceId = getCurrentDeviceId();
+                    _db.ref('costagas/dispositivosVinculados/' + deviceId).set({
+                        vinculado: true,
+                        fecha: new Date().toISOString()
+                    }).catch(() => {});
+                }
 
                 // Ir al login (ya vinculado, ahora ingresan con usuario y contraseña)
                 document.getElementById('vincularContainer').style.display = 'none';
@@ -5249,6 +5422,7 @@
                 productos[idx] = { ...productos[idx], ...data };
             } else {
                 data.id = generateId();
+                if (!_fbReady || !_db) data._creadoOffline = true;
                 productos.push(data);
             }
             Storage.set('productos', productos);
