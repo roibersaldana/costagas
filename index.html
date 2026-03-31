@@ -790,10 +790,15 @@
 
             /* ── Notificación ── */
             .notification {
-                top: 8px; right: 8px; left: 8px;
+                top: auto;
+                bottom: 80px;
+                right: 10px;
+                left: 10px;
                 max-width: none;
-                font-size: 13px;
-                padding: 10px 14px;
+                font-size: 14px;
+                padding: 12px 16px;
+                z-index: 99999;
+                text-align: center;
             }
 
             /* ── Cierre de caja ── */
@@ -1105,12 +1110,12 @@
             #floatingButtons .fb-desk { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
             #floatingButtons .fb-mobile-bar { display: none; }
 
-            /* ── Mobile: barra fija en la parte superior, debajo del header ── */
+            /* ── Mobile: barra fija en la parte INFERIOR ── */
             @media (max-width: 600px) {
                 #floatingButtons {
-                    bottom: unset;
+                    top: unset;
                     right: unset;
-                    top: 0;
+                    bottom: 0;
                     left: 0;
                     width: 100%;
                     flex-direction: column;
@@ -1124,8 +1129,9 @@
                     gap: 0;
                     width: 100%;
                     background: linear-gradient(135deg, #1a3d0f 0%, #2d5016 100%);
-                    box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+                    box-shadow: 0 -3px 10px rgba(0,0,0,0.35);
                     padding: 6px 8px;
+                    padding-bottom: calc(6px + env(safe-area-inset-bottom));
                     box-sizing: border-box;
                     justify-content: space-between;
                     align-items: center;
@@ -1133,7 +1139,7 @@
                 #floatingButtons .fb-mobile-bar button {
                     flex: 1;
                     margin: 0 3px;
-                    padding: 9px 4px;
+                    padding: 10px 4px;
                     border: none;
                     border-radius: 8px;
                     font-weight: 700;
@@ -1144,8 +1150,7 @@
                     transition: opacity .15s;
                 }
                 #floatingButtons .fb-mobile-bar button:active { opacity: .75; }
-                /* Compensar el espacio que ocupa la barra en el contenido */
-                #moduleContainer { padding-top: 56px !important; }
+                #moduleContainer { padding-bottom: 64px !important; }
             }
         
 /* ===== CIERRE DE CAJA PRO ===== */
@@ -1245,7 +1250,7 @@
         // ==================== SISTEMA DE ALMACENAMIENTO HÍBRIDO ====================
         const DB_KEYS = ['usuarios','productos','clientes','proveedores','trabajadores',
                          'fierros','pedidos','ventas','compras','gastos','ingresos','creditos','caja',
-                         'cierresCaja','ingresosCaja',
+                         'cierresCaja','ingresosCaja','_sistemaInicializado',
                          'cilindrosPrestados','cilindrosDeudas','fierrosKardex','fierrosDebo','fierrosMeDeben',
                          'dispositivoCodigo','dispositivosPanel'];
 
@@ -1273,8 +1278,6 @@
                                     idsNuevos.add(String(item.id));
                                 }
                             });
-                            // ✅ FIX ELIMINACIONES: leer Firebase directamente para saber
-                            // qué IDs existen y borrar los que ya no están en el array local
                             _db.ref(`costagas/${key}`).once('value').then(snap => {
                                 const fbData = snap.val();
                                 if (fbData && typeof fbData === 'object') {
@@ -1743,7 +1746,6 @@
                     { id: 1, username: 'admin', password: 'admin123', passwordHashed: false, role: 'admin', nombre: 'Administrador', mustChangePassword: true }
                 ]);
             } else {
-                // Garantizar que siempre exista al menos un admin
                 const usuarios = Storage.getArray('usuarios');
                 if (!usuarios.find(u => u.role === 'admin')) {
                     usuarios.push({ id: 1, username: 'admin', password: 'admin123', passwordHashed: false, role: 'admin', nombre: 'Administrador', mustChangePassword: true });
@@ -1754,6 +1756,9 @@
             // Datos de ejemplo SOLO la primera vez
             if (!yaInicializado) {
                 localStorage.setItem('_sistemaInicializado', 'true');
+                if (_fbReady && _db) {
+                    _db.ref('costagas/_sistemaInicializado').set(true).catch(() => {});
+                }
                 if (!Storage.get('productos')) Storage.set('productos', [
                     { id: 1, nombre: 'Balón 10kg', precio: 45.00, stock: 50, stockMin: 10, categoria: 'Balones' },
                     { id: 2, nombre: 'Balón 15kg', precio: 65.00, stock: 30, stockMin: 10, categoria: 'Balones' },
@@ -1777,7 +1782,6 @@
                 ]);
             }
 
-            // Arrays vacíos solo si nunca existieron (null = nunca existió, [] = fue vaciado a propósito)
             ['pedidos', 'ventas', 'compras', 'gastos', 'ingresos', 'creditos',
              'productos', 'clientes', 'proveedores', 'trabajadores', 'fierros'].forEach(key => {
                 if (localStorage.getItem(key) === null) Storage.set(key, []);
@@ -10262,65 +10266,139 @@
             renderPedidos();
         }
 
-        function editarPedido(id) {
-            const p = Storage.getArray('pedidos').find(x => x.id === id);
-            if (!p) return;
-            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
-            const itemsHtml = (p.items||[]).map((item, i) => `
-                <div style="display:grid;grid-template-columns:1fr 100px 70px 90px;gap:8px;align-items:center;background:#f9f9f9;border-radius:8px;padding:10px;margin-bottom:8px;border:1.5px solid #e0e0e0;">
-                    <div style="font-weight:700;font-size:14px;color:#333;">${item.nombre}</div>
+        window._epItems = [];
+
+        function epRenderItems() {
+            const productos = Storage.getArray('productos');
+            const html = window._epItems.map((item, i) => `
+                <div style="display:grid;grid-template-columns:1fr 90px 70px 80px 36px;gap:6px;align-items:center;background:#f9f9f9;border-radius:8px;padding:10px;margin-bottom:8px;border:1.5px solid #e0e0e0;">
+                    <div style="font-weight:700;font-size:13px;color:#333;">${item.nombre}</div>
                     <div>
-                        <div style="font-size:11px;color:#888;margin-bottom:2px;">Precio S/.</div>
-                        <input type="number" step="0.01" min="0" id="epPrecio_${i}" value="${item.precio}"
-                            oninput="recalcularTotalEdicion()"
-                            style="width:100%;padding:6px;border:2px solid #c8e6c9;border-radius:6px;font-size:14px;font-weight:700;color:#2d5016;text-align:center;">
+                        <div style="font-size:10px;color:#888;margin-bottom:2px;">Precio S/.</div>
+                        <input type="number" step="0.01" min="0" value="${item.precio}"
+                            oninput="window._epItems[${i}].precio=parseFloat(this.value)||0;epRecalcular()"
+                            style="width:100%;padding:5px;border:2px solid #c8e6c9;border-radius:6px;font-size:13px;font-weight:700;color:#2d5016;text-align:center;">
                     </div>
                     <div>
-                        <div style="font-size:11px;color:#888;margin-bottom:2px;">Cant.</div>
-                        <input type="number" min="1" id="epCant_${i}" value="${item.cantidad}"
-                            oninput="recalcularTotalEdicion()"
-                            style="width:100%;padding:6px;border:2px solid #c8e6c9;border-radius:6px;font-size:14px;font-weight:700;color:#1565c0;text-align:center;">
+                        <div style="font-size:10px;color:#888;margin-bottom:2px;">Cant.</div>
+                        <input type="number" min="1" value="${item.cantidad}"
+                            oninput="window._epItems[${i}].cantidad=parseInt(this.value)||1;epRecalcular()"
+                            style="width:100%;padding:5px;border:2px solid #c8e6c9;border-radius:6px;font-size:13px;font-weight:700;color:#1565c0;text-align:center;">
                     </div>
                     <div>
-                        <div style="font-size:11px;color:#888;margin-bottom:2px;">Subtotal</div>
-                        <div id="epSub_${i}" style="font-family:'Russo One',sans-serif;font-size:14px;color:#2d5016;text-align:center;background:white;border-radius:6px;padding:6px;border:1.5px solid #a5d6a7;">
+                        <div style="font-size:10px;color:#888;margin-bottom:2px;">Subtotal</div>
+                        <div style="font-family:'Russo One',sans-serif;font-size:13px;color:#2d5016;text-align:center;background:white;border-radius:6px;padding:5px;border:1.5px solid #a5d6a7;">
                             ${formatCurrency(item.precio * item.cantidad)}
                         </div>
                     </div>
+                    <button onclick="epEliminarItem(${i})" style="background:#ffebee;border:1.5px solid #ef9a9a;border-radius:6px;color:#c62828;font-size:18px;font-weight:700;cursor:pointer;padding:4px 8px;line-height:1;">×</button>
                 </div>`).join('');
+            const cont = document.getElementById('epItemsContainer');
+            if (cont) cont.innerHTML = html || '<div style="color:#bbb;text-align:center;padding:16px;font-size:13px;">Sin productos. Agrega uno abajo.</div>';
+            epRecalcular();
+        }
+
+        function epEliminarItem(i) {
+            window._epItems.splice(i, 1);
+            epRenderItems();
+        }
+
+        function epAgregarProducto() {
+            const sel = document.getElementById('epSelectProducto');
+            const idx = sel.selectedIndex;
+            if (!idx) return;
+            const opt = sel.options[idx];
+            window._epItems.push({ nombre: opt.dataset.nombre, precio: parseFloat(opt.dataset.precio)||0, cantidad: 1 });
+            sel.selectedIndex = 0;
+            epRenderItems();
+        }
+
+        function epRecalcular() {
+            const total = window._epItems.reduce((s,item) => s+(item.precio*item.cantidad), 0);
+            const el = document.getElementById('epTotalDisplay');
+            if (el) el.textContent = formatCurrency(total);
+        }
+
+        function editarPedido(id) {
+            const p = Storage.getArray('pedidos').find(x => x.id === id);
+            if (!p) return;
+            window._epItems = (p.items||[]).map(i => ({...i}));
+            const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const productos = Storage.getArray('productos');
+            const pagos = p.pagos || {};
+            const fechaInput = (p.fecha||'').replace(' ','T').substring(0,16);
 
             document.getElementById('editarPedidoContenido').innerHTML = `
-                <input type="hidden" id="epNumItems" value="${(p.items||[]).length}">
-                <div style="margin-bottom:14px;">
-                    <div class="form-field">
-                        <label>Cliente:</label>
-                        <input type="text" id="epCliente" value="${p.clienteNombre||''}"
-                            style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;">
-                    </div>
+                <!-- Cliente -->
+                <div class="form-field" style="margin-bottom:12px;">
+                    <label style="font-weight:700;color:#333;font-size:14px;">👤 Cliente:</label>
+                    <input type="text" id="epCliente" value="${p.clienteNombre||''}"
+                        style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;margin-top:4px;">
                 </div>
-                <div style="margin-bottom:14px;">
-                    <label style="font-weight:700;color:#333;font-size:15px;">Trabajador:</label>
-                    <select id="epTrabajador" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;margin-top:6px;font-family:Rajdhani,sans-serif;">
+                <!-- Trabajador -->
+                <div class="form-field" style="margin-bottom:12px;">
+                    <label style="font-weight:700;color:#333;font-size:14px;">👷 Trabajador:</label>
+                    <select id="epTrabajador" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;margin-top:4px;font-family:Rajdhani,sans-serif;">
                         <option value="">-- Sin asignar --</option>
-                        ${trabajadores.map(t => `<option value="${t.id}" data-nombre="${t.nombre}" data-codigo="${t.codigo||''}" ${t.id === p.trabajadorId ? 'selected' : ''}>${t.codigo?'['+t.codigo+'] ':''}${t.nombre}</option>`).join('')}
+                        ${trabajadores.map(t => `<option value="${t.id}" data-nombre="${t.nombre}" data-codigo="${t.codigo||''}" ${t.id===p.trabajadorId?'selected':''}>${t.codigo?'['+t.codigo+'] ':''}${t.nombre}</option>`).join('')}
                     </select>
                 </div>
-                <div style="margin-bottom:14px;">
-                    <label style="font-weight:700;color:#333;font-size:15px;">📦 Productos y precios:</label>
-                    <div style="margin-top:8px;">${itemsHtml}</div>
+                <!-- Fecha -->
+                <div class="form-field" style="margin-bottom:12px;">
+                    <label style="font-weight:700;color:#333;font-size:14px;">📅 Fecha:</label>
+                    <input type="datetime-local" id="epFecha" value="${fechaInput}"
+                        style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;margin-top:4px;font-family:Rajdhani,sans-serif;">
                 </div>
-                <div style="background:linear-gradient(135deg,#1e4d0f,#2d6b18);border-radius:12px;padding:16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-                    <span style="font-family:'Russo One',sans-serif;font-size:16px;color:white;">NUEVO TOTAL:</span>
-                    <span id="epTotalDisplay" style="font-family:'Russo One',sans-serif;font-size:28px;color:#FFD700;">
-                        ${formatCurrency(p.total)}
-                    </span>
+                <!-- Productos -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-weight:700;color:#333;font-size:14px;">📦 Productos:</label>
+                    <div id="epItemsContainer" style="margin-top:8px;"></div>
+                    <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+                        <select id="epSelectProducto" style="flex:1;padding:9px;border:2px solid #2196f3;border-radius:8px;font-size:14px;font-family:Rajdhani,sans-serif;">
+                            <option value="">+ Selecciona producto a agregar...</option>
+                            ${productos.map(pr => `<option value="${pr.id}" data-nombre="${pr.nombre}" data-precio="${pr.precio}">${pr.nombre} — S/ ${pr.precio}</option>`).join('')}
+                        </select>
+                        <button onclick="epAgregarProducto()" style="background:#2196f3;color:white;border:none;padding:9px 16px;border-radius:8px;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;">➕ Agregar</button>
+                    </div>
                 </div>
-                <div style="margin-bottom:14px;">
-                    <label style="font-weight:700;color:#333;font-size:15px;">Estado:</label>
-                    <select id="epEstado" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;margin-top:6px;font-family:Rajdhani,sans-serif;">
+                <!-- Total -->
+                <div style="background:linear-gradient(135deg,#1e4d0f,#2d6b18);border-radius:12px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                    <span style="font-family:'Russo One',sans-serif;font-size:15px;color:white;">TOTAL:</span>
+                    <span id="epTotalDisplay" style="font-family:'Russo One',sans-serif;font-size:26px;color:#FFD700;">${formatCurrency(p.total)}</span>
+                </div>
+                <!-- Método de pago -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-weight:700;color:#333;font-size:14px;">💳 Método de pago:</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+                        <div>
+                            <div style="font-size:11px;color:#888;margin-bottom:3px;">💵 Efectivo S/.</div>
+                            <input type="number" step="0.01" min="0" id="epEfectivo" value="${pagos.efectivo||0}"
+                                style="width:100%;padding:8px;border:2px solid #a5d6a7;border-radius:8px;font-size:15px;font-weight:700;color:#2d5016;">
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:#888;margin-bottom:3px;">📱 Yape/Plin S/.</div>
+                            <input type="number" step="0.01" min="0" id="epYape" value="${pagos.yape||0}"
+                                style="width:100%;padding:8px;border:2px solid #ce93d8;border-radius:8px;font-size:15px;font-weight:700;color:#7b1fa2;">
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:#888;margin-bottom:3px;">🧾 Recibos S/.</div>
+                            <input type="number" step="0.01" min="0" id="epRecibos" value="${pagos.recibos||0}"
+                                style="width:100%;padding:8px;border:2px solid #90caf9;border-radius:8px;font-size:15px;font-weight:700;color:#1565c0;">
+                        </div>
+                        <div>
+                            <div style="font-size:11px;color:#888;margin-bottom:3px;">🎫 Vales FISE S/.</div>
+                            <input type="number" step="0.01" min="0" id="epValesFISE" value="${pagos.valesFISE||0}"
+                                style="width:100%;padding:8px;border:2px solid #ffcc80;border-radius:8px;font-size:15px;font-weight:700;color:#e65100;">
+                        </div>
+                    </div>
+                </div>
+                <!-- Estado -->
+                <div class="form-field" style="margin-bottom:16px;">
+                    <label style="font-weight:700;color:#333;font-size:14px;">📋 Estado:</label>
+                    <select id="epEstado" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;margin-top:4px;font-family:Rajdhani,sans-serif;">
                         <option value="completado" ${p.estado==='completado'?'selected':''}>Completado</option>
-                        <option value="credito" ${p.estado==='credito'?'selected':''}>Crédito</option>
-                        <option value="mixto" ${p.estado==='mixto'?'selected':''}>Mixto</option>
+                        <option value="credito"    ${p.estado==='credito'?'selected':''}>Crédito</option>
+                        <option value="mixto"      ${p.estado==='mixto'?'selected':''}>Mixto</option>
                     </select>
                 </div>
                 <div style="display:flex;gap:10px;">
@@ -10329,52 +10407,38 @@
                 </div>
             `;
             document.getElementById('modalEditarPedido').classList.add('active');
+            epRenderItems();
         }
 
-        function recalcularTotalEdicion() {
-            const n = parseInt(document.getElementById('epNumItems')?.value) || 0;
-            let total = 0;
-            for (let i = 0; i < n; i++) {
-                const precio = parseFloat(document.getElementById(`epPrecio_${i}`)?.value) || 0;
-                const cant   = parseInt(document.getElementById(`epCant_${i}`)?.value)   || 0;
-                const sub    = precio * cant;
-                total += sub;
-                const subEl = document.getElementById(`epSub_${i}`);
-                if (subEl) subEl.textContent = formatCurrency(sub);
-            }
-            const totalEl = document.getElementById('epTotalDisplay');
-            if (totalEl) totalEl.textContent = formatCurrency(total);
-        }
+        function recalcularTotalEdicion() { epRecalcular(); }
 
         function guardarEdicionPedido(id) {
-            const pedidos  = Storage.getArray('pedidos');
-            const idx      = pedidos.findIndex(p => p.id === id);
+            const pedidos = Storage.getArray('pedidos');
+            const idx = pedidos.findIndex(p => p.id === id);
             if (idx === -1) return;
-            const p        = pedidos[idx];
+            const p = pedidos[idx];
             const nuevoCliente = document.getElementById('epCliente').value.trim();
             if (!nuevoCliente) { showNotification('El nombre del cliente es obligatorio', 'error'); return; }
-            const sel  = document.getElementById('epTrabajador');
-            const opt  = sel.options[sel.selectedIndex];
-            const n    = parseInt(document.getElementById('epNumItems')?.value) || 0;
-
-            // Recalcular items con nuevos precios y cantidades
-            const nuevoTotal = (() => {
-                let t = 0;
-                for (let i = 0; i < n; i++) {
-                    const precio = parseFloat(document.getElementById(`epPrecio_${i}`)?.value) || 0;
-                    const cant   = parseInt(document.getElementById(`epCant_${i}`)?.value)   || 0;
-                    p.items[i].precio   = precio;
-                    p.items[i].cantidad = cant;
-                    t += precio * cant;
-                }
-                return t;
-            })();
-
+            if (window._epItems.length === 0) { showNotification('El pedido debe tener al menos un producto', 'error'); return; }
+            const sel = document.getElementById('epTrabajador');
+            const opt = sel.options[sel.selectedIndex];
+            const fechaVal = document.getElementById('epFecha').value;
+            const nuevaFecha = fechaVal ? fechaVal.replace('T',' ') : p.fecha;
+            const nuevoTotal = window._epItems.reduce((s,item) => s+(item.precio*item.cantidad), 0);
             const totalAnterior = p.total;
+            const nuevoPagos = {
+                efectivo:  parseFloat(document.getElementById('epEfectivo').value)  || 0,
+                yape:      parseFloat(document.getElementById('epYape').value)      || 0,
+                recibos:   parseFloat(document.getElementById('epRecibos').value)   || 0,
+                valesFISE: parseFloat(document.getElementById('epValesFISE').value) || 0,
+            };
             p.clienteNombre = nuevoCliente;
+            p.items         = window._epItems.map(i => ({...i}));
             p.total         = nuevoTotal;
             p.estado        = document.getElementById('epEstado').value;
             p.tipoPago      = p.estado;
+            p.fecha         = nuevaFecha;
+            p.pagos         = nuevoPagos;
             if (opt.value) {
                 p.trabajadorId     = parseInt(opt.value);
                 p.trabajadorNombre = opt.dataset.nombre;
@@ -10383,35 +10447,29 @@
                 p.trabajadorId = null; p.trabajadorNombre = ''; p.trabajadorCodigo = '';
             }
             Storage.set('pedidos', pedidos);
-
-            // Actualizar venta asociada con el nuevo monto
+            // Actualizar venta
             const ventas = Storage.getArray('ventas');
             const vi = ventas.findIndex(v => v.pedidoId === id);
             if (vi !== -1) { ventas[vi].monto = nuevoTotal; Storage.set('ventas', ventas); }
-
-            // Actualizar crédito si existe
+            // Actualizar crédito
             const creditos = Storage.getArray('creditos');
             const ci = creditos.findIndex(c => c.pedidoId === id);
             if (ci !== -1) {
                 const diff = nuevoTotal - totalAnterior;
                 creditos[ci].monto = nuevoTotal;
-                creditos[ci].saldo = Math.max(0, (creditos[ci].saldo || 0) + diff);
+                creditos[ci].saldo = Math.max(0, (creditos[ci].saldo||0) + diff);
                 Storage.set('creditos', creditos);
             }
-
-            // ── MARCAR CIERRE DE CAJA CON BADGE EDITADO ──
-            // Buscar el cierre cuya ventana (fechaApertura → fecha) contenga este pedido
+            // Marcar cierre de caja
             const fechaPedido = p.fecha || '';
             const cierres = Storage.getArray('cierresCaja');
             let cierreAfectado = null;
-            // El pedido pertenece al turno cuya apertura es ≤ fecha del pedido ≤ cierre
             for (const c of cierres) {
-                const apertura = (c.fechaApertura || c.fecha || '').substring(0,16);
-                const cierre   = (c.fecha || '').substring(0,16);
+                const apertura = (c.fechaApertura||c.fecha||'').substring(0,16);
+                const cierre   = (c.fecha||'').substring(0,16);
                 const fp       = fechaPedido.substring(0,16);
                 if (fp >= apertura && fp <= cierre) { cierreAfectado = c; break; }
             }
-            // Fallback: buscar el cierre más cercano por fecha
             if (!cierreAfectado && cierres.length) {
                 const sorted = cierres.slice().sort((a,b) => b.fecha.localeCompare(a.fecha));
                 cierreAfectado = sorted.find(c => (c.fecha||'') >= fechaPedido) || sorted[0];
@@ -10419,16 +10477,12 @@
             if (cierreAfectado) {
                 if (!cierreAfectado.pedidosEditados) cierreAfectado.pedidosEditados = [];
                 cierreAfectado.pedidosEditados.push({
-                    pedidoId: id,
-                    fecha: getCurrentDateTime(),
-                    cliente: nuevoCliente,
-                    editor: currentUser?.nombre || 'Admin',
-                    totalAnterior,
-                    totalNuevo: nuevoTotal
+                    pedidoId: id, fecha: getCurrentDateTime(),
+                    cliente: nuevoCliente, editor: currentUser?.nombre||'Admin',
+                    totalAnterior, totalNuevo: nuevoTotal
                 });
                 Storage.set('cierresCaja', cierres);
             }
-
             cerrarModal('modalEditarPedido');
             showNotification('✅ Pedido actualizado correctamente', 'success');
             renderPedidos();
