@@ -1591,6 +1591,16 @@
 
         function refreshActiveModule() {
             if (!_activeModule) return;
+            // ✅ FIX DEFINITIVO: nunca refrescar si hay un modal abierto
+            // Los modales viven dentro del HTML del módulo — si se re-renderiza, se cierran
+            const modalAbierto = document.querySelector('.modal.active');
+            if (modalAbierto) return;
+            // Tampoco refrescar usuarios si el código de dispositivo está activo
+            // (el panel de código vive dentro del HTML de renderUsuarios)
+            if (_activeModule === 'usuarios') {
+                const codigoPanel = document.getElementById('codigoDispositivoPanel');
+                if (codigoPanel && codigoPanel.style.display !== 'none') return;
+            }
             try {
                 // Solo refrescar módulos de solo lectura, no el carrito activo
                 const noRefresh = ['nuevoPedido'];
