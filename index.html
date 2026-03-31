@@ -1305,7 +1305,14 @@
                 }
             }
 
-            static getArray(key) { return this.get(key) || []; }
+            static getArray(key) {
+                const val = this.get(key);
+                if (!val) return [];
+                // ✅ FIX GLOBAL: si Firebase devuelve un objeto en vez de array, convertir
+                if (Array.isArray(val)) return val.filter(v => v !== null && v !== undefined);
+                if (typeof val === 'object') return Object.values(val).filter(v => v !== null && v !== undefined);
+                return [];
+            }
 
             // ---- Backup JSON ----
             static exportBackup() {
@@ -1396,7 +1403,9 @@
                     });
                     if (changed && currentUser) {
                         updateDashboard();
-                        refreshActiveModule();
+                        // ✅ FIX: no re-renderizar si hay un modal abierto (evita que se cierre)
+                        const modalAbierto = document.querySelector('.modal.active');
+                        if (!modalAbierto) refreshActiveModule();
                     }
                 }, (error) => {
                     console.warn('Error listener costagas:', error.message);
@@ -4100,7 +4109,7 @@
                             <div style="font-family:'Russo One',sans-serif;font-size:20px;color:white;">🔑 Código de acceso para nuevos dispositivos</div>
                             <div style="color:rgba(255,255,255,.7);font-size:13px;margin-top:4px;">Genera un código temporal de 10 minutos para verificar un dispositivo nuevo</div>
                         </div>
-                        <button onclick="generarCodigoDispositivo();renderUsuarios();" style="background:#FFD700;color:#1a237e;border:none;padding:12px 24px;border-radius:10px;font-weight:700;font-size:16px;cursor:pointer;font-family:'Russo One',sans-serif;">
+                        <button onclick="generarCodigoDispositivo();" style="background:#FFD700;color:#1a237e;border:none;padding:12px 24px;border-radius:10px;font-weight:700;font-size:16px;cursor:pointer;font-family:'Russo One',sans-serif;">
                             ⚡ GENERAR CÓDIGO
                         </button>
                     </div>
@@ -4345,7 +4354,8 @@
             Storage.set('usuarios', usuarios);
             cerrarModal('modalUsuario');
             showNotification('Usuario guardado exitosamente', 'success');
-            renderUsuarios();
+            // ✅ FIX: delay para que el modal cierre antes de re-renderizar
+            setTimeout(() => renderUsuarios(), 100);
         }
 
         function eliminarUsuario(id) {
@@ -4359,7 +4369,7 @@
                 usuarios = usuarios.filter(u => u.id !== id);
                 Storage.set('usuarios', usuarios);
                 showNotification('Usuario eliminado', 'success');
-                renderUsuarios();
+                setTimeout(() => renderUsuarios(), 100);
             }
         }
 
@@ -10401,18 +10411,25 @@
         }
 
         function updateDashboard() {
-            const todosLosPedidos = Storage.getArray('pedidos');
-            const pedidosFiltrados = getPedidosPropios(todosLosPedidos);
-            const ventas    = Storage.getArray('ventas');
-            const creditos  = Storage.getArray('creditos');
-            const productos = Storage.getArray('productos');
+            // ✅ FIX: garantizar arrays aunque Firebase devuelva objetos
+            function toArr(val) {
+                if (!val) return [];
+                if (Array.isArray(val)) return val.filter(v => v !== null && v !== undefined);
+                if (typeof val === 'object') return Object.values(val).filter(v => v !== null && v !== undefined);
+                return [];
+            }
+            const todosLosPedidos = toArr(Storage.getArray('pedidos'));
+            const pedidosFiltrados = toArr(getPedidosPropios(todosLosPedidos));
+            const ventas    = toArr(Storage.getArray('ventas'));
+            const creditos  = toArr(Storage.getArray('creditos'));
+            const productos = toArr(Storage.getArray('productos'));
             const hoy = getCurrentDate();
             const esAdmin = currentUser?.role === 'admin';
 
-            const pedidosHoy = (Array.isArray(pedidosFiltrados)?pedidosFiltrados:[]).filter(p => (p.fecha||'').includes(hoy));
+            const pedidosHoy = pedidosFiltrados.filter(p => (p.fecha||'').includes(hoy));
             const ventasHoy  = esAdmin
-                ? ventas.filter(v => v.fecha.includes(hoy))
-                : ventas.filter(v => v.fecha.includes(hoy) && pedidosFiltrados.some(p => p.id === v.pedidoId));
+                ? ventas.filter(v => (v.fecha||'').includes(hoy))
+                : ventas.filter(v => (v.fecha||'').includes(hoy) && pedidosFiltrados.some(p => p.id === v.pedidoId));
 
             const totalVentasHoy  = ventasHoy.reduce((sum, v) => sum + v.monto, 0);
             const totalCreditos   = esAdmin
