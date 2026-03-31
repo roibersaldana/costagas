@@ -1391,7 +1391,9 @@
                         // Si Firebase devuelve un objeto con ids (no array nativo), convertir a array
                         // ✅ FIX: filtrar nulls — nodos eliminados en Firebase llegan como null
                         // sin este filtro, productos eliminados "resucitan" desde otros dispositivos
-                        if (incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
+                        // ✅ FIX CAJA: caja es objeto plano {estado,montoInicial...} — NO convertir con Object.values
+                        const esClave_caja = (key === 'caja' || key.startsWith('caja_u'));
+                        if (!esClave_caja && incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
                             incoming = Object.values(incoming).filter(v => v !== null && v !== undefined);
                         }
                         const incomingStr = JSON.stringify(incoming);
@@ -1600,6 +1602,13 @@
             if (_activeModule === 'usuarios') {
                 const codigoPanel = document.getElementById('codigoDispositivoPanel');
                 if (codigoPanel && codigoPanel.style.display !== 'none') return;
+            }
+            // ✅ FIX: no refrescar cierreCaja después de 2s (evita parpadeo)
+            // pero sí dejar pasar el primer sync de Firebase que trae datos frescos
+            if (_activeModule === 'cierreCaja') {
+                const cc2Panel = document.querySelector('.cc2');
+                const abierto = window._cierreCajaAbierto || 0;
+                if (cc2Panel && (Date.now() - abierto) > 2000) return;
             }
             try {
                 // Solo refrescar módulos de solo lectura, no el carrito activo
@@ -2906,7 +2915,24 @@
                     renderFierros();
                     break;
                 case 'cierreCaja':
+                    window._cierreCajaAbierto = Date.now();
+                    // ✅ Render inmediato con localStorage (sin delay)
                     renderCierreCaja();
+                    // ✅ Luego pedir datos frescos de caja a Firebase y re-renderizar UNA sola vez
+                    if (_fbReady && _db) {
+                        const cajaKey = getCajaKey();
+                        _db.ref('costagas/' + cajaKey).once('value').then(snap => {
+                            const val = snap.val();
+                            if (val && typeof val === 'object' && !Array.isArray(val)) {
+                                const local = Storage.get(cajaKey);
+                                if (JSON.stringify(local) !== JSON.stringify(val)) {
+                                    localStorage.setItem(cajaKey, JSON.stringify(val));
+                                }
+                            }
+                            // Re-renderizar solo si seguimos en este módulo
+                            if (_activeModule === 'cierreCaja') renderCierreCaja();
+                        }).catch(() => {});
+                    }
                     break;
                 case 'reportes':
                     renderReportes();
@@ -10516,20 +10542,10 @@
                             }
                         }).catch(() => {});
                     });
-                    // También actualizar cajas dinámicas
-                    _db.ref('costagas').once('value').then(snap => {
-                        const all = snap.val();
-                        if (!all) return;
-                        Object.keys(all).forEach(key => {
-                            if (!key.startsWith('caja_u')) return;
-                            const val = all[key];
-                            if (JSON.stringify(Storage.get(key)) !== JSON.stringify(val)) {
-                                localStorage.setItem(key, JSON.stringify(val));
-                            }
-                        });
-                        updateDashboard();
-                        refreshActiveModule();
-                    }).catch(() => {});
+                    // ✅ FIX CAJA: no actualizar estado de caja desde Firebase al volver a la pestaña
+                    // El estado abierta/cerrada es local — pisarlo desde la nube rompe el módulo
+                    updateDashboard();
+                    refreshActiveModule();
                 }
             });
         });
