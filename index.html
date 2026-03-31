@@ -1258,48 +1258,47 @@
 
             // Escritura: localStorage inmediato + Firebase por item (evita que dispositivos se pisen)
             static set(key, value) {
-                const prev = Storage.get(key); // snapshot anterior para calcular eliminados
                 localStorage.setItem(key, JSON.stringify(value));
-                Storage._lastWrite[key] = Date.now(); // registrar tiempo de escritura local
+                Storage._lastWrite[key] = Date.now();
                 if (_fbReady && _db) {
                     if (Storage._timers[key]) clearTimeout(Storage._timers[key]);
                     Storage._timers[key] = setTimeout(() => {
                         showSyncBadge('pendiente');
-
                         if (Array.isArray(value)) {
-                            // ✅ MERGE POR ITEM: cada registro se guarda en su propio nodo
-                            // usando su id. Así dos dispositivos NUNCA se sobreescriben.
-                            const updates = {};
                             const idsNuevos = new Set();
-
+                            const updates = {};
                             value.forEach(item => {
                                 if (item && item.id != null) {
                                     updates[`costagas/${key}/${item.id}`] = item;
                                     idsNuevos.add(String(item.id));
                                 }
                             });
-
-                            // Registros eliminados localmente → borrar también en Firebase
-                            if (Array.isArray(prev)) {
-                                prev.forEach(item => {
-                                    if (item && item.id != null && !idsNuevos.has(String(item.id))) {
-                                        updates[`costagas/${key}/${item.id}`] = null;
-                                    }
-                                });
-                            }
-
-                            if (Object.keys(updates).length > 0) {
-                                _db.ref().update(updates)
-                                    .then(() => showSyncBadge('online'))
-                                    .catch(() => showSyncBadge('offline'));
-                            }
+                            // ✅ FIX ELIMINACIONES: leer Firebase directamente para saber
+                            // qué IDs existen y borrar los que ya no están en el array local
+                            _db.ref(`costagas/${key}`).once('value').then(snap => {
+                                const fbData = snap.val();
+                                if (fbData && typeof fbData === 'object') {
+                                    Object.keys(fbData).forEach(fbId => {
+                                        if (!idsNuevos.has(String(fbId))) {
+                                            updates[`costagas/${key}/${fbId}`] = null;
+                                        }
+                                    });
+                                }
+                                if (Object.keys(updates).length > 0) {
+                                    _db.ref().update(updates)
+                                        .then(() => showSyncBadge('online'))
+                                        .catch(() => showSyncBadge('offline'));
+                                }
+                            }).catch(() => {
+                                if (Object.keys(updates).length > 0) {
+                                    _db.ref().update(updates).catch(() => showSyncBadge('offline'));
+                                }
+                            });
                         } else {
-                            // Valores simples (config, caja, etc.) → set normal
                             _db.ref(`costagas/${key}`).set(value)
                                 .then(() => showSyncBadge('online'))
                                 .catch(() => showSyncBadge('offline'));
                         }
-
                         delete Storage._timers[key];
                     }, 80);
                 }
@@ -1736,58 +1735,52 @@
 
         // ==================== DATOS INICIALES ====================
         function initializeData() {
-            // Usuarios por defecto
+            const yaInicializado = localStorage.getItem('_sistemaInicializado') === 'true';
+
+            // Solo el admin — nunca crear vendedor por defecto
             if (!Storage.get('usuarios')) {
                 Storage.set('usuarios', [
-                    { id: 1, username: 'admin', password: 'admin123', passwordHashed: false, role: 'admin', nombre: 'Administrador', mustChangePassword: true },
-                    { id: 2, username: 'vendedor', password: 'vend123', passwordHashed: false, role: 'vendedor', nombre: 'Vendedor 1', mustChangePassword: true }
+                    { id: 1, username: 'admin', password: 'admin123', passwordHashed: false, role: 'admin', nombre: 'Administrador', mustChangePassword: true }
                 ]);
+            } else {
+                // Garantizar que siempre exista al menos un admin
+                const usuarios = Storage.getArray('usuarios');
+                if (!usuarios.find(u => u.role === 'admin')) {
+                    usuarios.push({ id: 1, username: 'admin', password: 'admin123', passwordHashed: false, role: 'admin', nombre: 'Administrador', mustChangePassword: true });
+                    Storage.set('usuarios', usuarios);
+                }
             }
-            
-            // Productos
-            if (!Storage.get('productos')) {
-                Storage.set('productos', [
+
+            // Datos de ejemplo SOLO la primera vez
+            if (!yaInicializado) {
+                localStorage.setItem('_sistemaInicializado', 'true');
+                if (!Storage.get('productos')) Storage.set('productos', [
                     { id: 1, nombre: 'Balón 10kg', precio: 45.00, stock: 50, stockMin: 10, categoria: 'Balones' },
                     { id: 2, nombre: 'Balón 15kg', precio: 65.00, stock: 30, stockMin: 10, categoria: 'Balones' },
                     { id: 3, nombre: 'Balón 45kg', precio: 180.00, stock: 20, stockMin: 5, categoria: 'Balones' },
                     { id: 4, nombre: 'Regulador', precio: 35.00, stock: 15, stockMin: 5, categoria: 'Accesorios' },
                     { id: 5, nombre: 'Manguera 2m', precio: 25.00, stock: 40, stockMin: 10, categoria: 'Accesorios' }
                 ]);
-            }
-            
-            // Clientes
-            if (!Storage.get('clientes')) {
-                Storage.set('clientes', [
+                if (!Storage.get('clientes')) Storage.set('clientes', [
                     { id: 1, nombre: 'Juan Pérez', telefono: '987654321', direccion: 'Av. Principal 123', credito: 0 },
                     { id: 2, nombre: 'María García', telefono: '987654322', direccion: 'Jr. Comercio 456', credito: 0 }
                 ]);
-            }
-            
-            // Proveedores
-            if (!Storage.get('proveedores')) {
-                Storage.set('proveedores', [
+                if (!Storage.get('proveedores')) Storage.set('proveedores', [
                     { id: 1, nombre: 'Distribuidora Gas SAC', ruc: '20123456789', telefono: '945678901', direccion: 'Av. Industrial 789' }
                 ]);
-            }
-            
-            // Trabajadores
-            if (!Storage.get('trabajadores')) {
-                Storage.set('trabajadores', [
+                if (!Storage.get('trabajadores')) Storage.set('trabajadores', [
                     { id: 1, nombre: 'Carlos Ramos', cargo: 'Repartidor', telefono: '987111222', sueldo: 1500 }
                 ]);
-            }
-            
-            // Fierros
-            if (!Storage.get('fierros')) {
-                Storage.set('fierros', [
+                if (!Storage.get('fierros')) Storage.set('fierros', [
                     { id: 1, codigo: 'F001', tipo: 'Balón 10kg', estado: 'Disponible', ubicacion: 'Almacén' },
                     { id: 2, codigo: 'F002', tipo: 'Balón 10kg', estado: 'En ruta', ubicacion: 'Reparto' }
                 ]);
             }
-            
-            // Inicializar arrays vacíos
-            ['pedidos', 'ventas', 'compras', 'gastos', 'ingresos', 'creditos'].forEach(key => {
-                if (!Storage.get(key)) Storage.set(key, []);
+
+            // Arrays vacíos solo si nunca existieron (null = nunca existió, [] = fue vaciado a propósito)
+            ['pedidos', 'ventas', 'compras', 'gastos', 'ingresos', 'creditos',
+             'productos', 'clientes', 'proveedores', 'trabajadores', 'fierros'].forEach(key => {
+                if (localStorage.getItem(key) === null) Storage.set(key, []);
             });
             
             // Caja
