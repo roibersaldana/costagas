@@ -1110,38 +1110,43 @@
             #floatingButtons .fb-desk { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
             #floatingButtons .fb-mobile-bar { display: none; }
 
-            /* ── Mobile: barra fija en la parte INFERIOR ── */
-            @media (max-width: 600px) {
+            /* ── Mobile / Tablet: barra fija abajo sin tapar contenido ── */
+            @media (max-width: 768px) {
                 #floatingButtons {
-                    top: unset;
-                    right: unset;
-                    bottom: 0;
-                    left: 0;
+                    position: fixed !important;
+                    top: auto !important;
+                    right: 0 !important;
+                    bottom: 0 !important;
+                    left: 0 !important;
                     width: 100%;
                     flex-direction: column;
                     gap: 0;
                     align-items: stretch;
+                    z-index: 99999;
+                    pointer-events: none;
                 }
-                #floatingButtons .fb-desk { display: none; }
+                #floatingButtons .fb-desk { display: none !important; }
                 #floatingButtons .fb-mobile-bar {
                     display: flex;
                     flex-direction: row;
-                    gap: 0;
+                    gap: 8px;
                     width: 100%;
                     background: linear-gradient(135deg, #1a3d0f 0%, #2d5016 100%);
-                    box-shadow: 0 -3px 10px rgba(0,0,0,0.35);
-                    padding: 6px 8px;
-                    padding-bottom: calc(6px + env(safe-area-inset-bottom));
+                    box-shadow: 0 -4px 14px rgba(0,0,0,0.35);
+                    padding: 8px 10px;
+                    padding-bottom: calc(8px + env(safe-area-inset-bottom));
                     box-sizing: border-box;
                     justify-content: space-between;
                     align-items: center;
+                    pointer-events: auto;
                 }
                 #floatingButtons .fb-mobile-bar button {
                     flex: 1;
-                    margin: 0 3px;
-                    padding: 10px 4px;
+                    margin: 0;
+                    min-height: 44px;
+                    padding: 11px 6px;
                     border: none;
-                    border-radius: 8px;
+                    border-radius: 10px;
                     font-weight: 700;
                     font-size: 12px;
                     cursor: pointer;
@@ -1150,7 +1155,9 @@
                     transition: opacity .15s;
                 }
                 #floatingButtons .fb-mobile-bar button:active { opacity: .75; }
-                #moduleContainer { padding-bottom: 64px !important; }
+                body { padding-bottom: 78px !important; }
+                #moduleContainer { padding-bottom: 92px !important; }
+                .container { padding-bottom: 92px !important; }
             }
         
 /* ===== CIERRE DE CAJA PRO ===== */
@@ -1261,49 +1268,242 @@
                 return data ? JSON.parse(data) : null;
             }
 
-            // Escritura: localStorage inmediato + Firebase por item (evita que dispositivos se pisen)
+            static _clone(value) {
+                return JSON.parse(JSON.stringify(value));
+            }
+
+            static _savePendingDeletes() {
+                localStorage.setItem('_pendingDeletes', JSON.stringify(Storage._pendingDeletes));
+            }
+
+            static _saveDeletedTombstones() {
+                localStorage.setItem('_deletedTombstones', JSON.stringify(Storage._deletedTombstones));
+            }
+
+            static _hasDeletedTombstone(collectionKey, id) {
+                const bag = Storage._deletedTombstones[collectionKey] || {};
+                return !!bag[String(id)];
+            }
+
+            static _markDeletedTombstone(collectionKey, id, meta) {
+                if (!Storage._deletedTombstones[collectionKey]) Storage._deletedTombstones[collectionKey] = {};
+                Storage._deletedTombstones[collectionKey][String(id)] = meta || { deletedAt: Date.now(), id: String(id) };
+                Storage._saveDeletedTombstones();
+            }
+
+            static _purgeDeletedFromLocal(collectionKey) {
+                const bag = Storage._deletedTombstones[collectionKey] || {};
+                const arr = Storage.getArray(collectionKey);
+                const clean = arr.filter(item => !item || item.id == null || !bag[String(item.id)]);
+                if (clean.length !== arr.length) {
+                    localStorage.setItem(collectionKey, JSON.stringify(clean));
+                }
+                return clean;
+            }
+
+            static _markPendingDelete(collectionKey, id) {
+                if (!Storage._pendingDeletes[collectionKey]) Storage._pendingDeletes[collectionKey] = [];
+                const idStr = String(id);
+                if (!Storage._pendingDeletes[collectionKey].includes(idStr)) {
+                    Storage._pendingDeletes[collectionKey].push(idStr);
+                    Storage._savePendingDeletes();
+                }
+            }
+
+            static _clearPendingDelete(collectionKey, id) {
+                const list = Storage._pendingDeletes[collectionKey] || [];
+                const idStr = String(id);
+                Storage._pendingDeletes[collectionKey] = list.filter(x => x !== idStr);
+                if (Storage._pendingDeletes[collectionKey].length === 0) delete Storage._pendingDeletes[collectionKey];
+                Storage._savePendingDeletes();
+            }
+
+            static _stripSyncFlags(item) {
+                if (!item || typeof item !== 'object') return item;
+                const clean = { ...item };
+                delete clean._pendienteSync;
+                delete clean._creadoOffline;
+                return clean;
+            }
+
+            static _normalizeUpdatedAt(item, fallback = 0) {
+                if (!item || typeof item !== 'object') return fallback;
+                const raw = item.updatedAt;
+                const num = typeof raw === 'number' ? raw : parseInt(raw, 10);
+                return Number.isFinite(num) ? num : fallback;
+            }
+
+            static _prepareArrayForWrite(key, previousArray, nextArray) {
+                const now = Date.now();
+                const prevMap = new Map((previousArray || []).filter(item => item && item.id != null).map(item => [String(item.id), item]));
+                return (nextArray || [])
+                    .filter(v => v !== null && v !== undefined)
+                    .map(item => Storage._clone(item))
+                    .filter(item => !item || item.id == null || !Storage._hasDeletedTombstone(key, item.id))
+                    .map(item => {
+                        if (!item || item.id == null) return item;
+                        const prevItem = prevMap.get(String(item.id));
+                        const cleanPrev = prevItem ? JSON.stringify(Storage._stripSyncFlags(prevItem)) : null;
+                        const cleanNext = JSON.stringify(Storage._stripSyncFlags(item));
+                        const changed = !prevItem || cleanPrev !== cleanNext || item._creadoOffline;
+                        if (changed) {
+                            const prevUpdated = Storage._normalizeUpdatedAt(prevItem, 0);
+                            item.updatedAt = Math.max(now, prevUpdated + 1);
+                        } else if (prevItem && item.updatedAt == null) {
+                            item.updatedAt = Storage._normalizeUpdatedAt(prevItem, now);
+                        } else if (item.updatedAt == null) {
+                            item.updatedAt = now;
+                        }
+                        return item;
+                    });
+            }
+
+            static _mergeArrayByUpdatedAt(key, localArr, incomingArr) {
+                const pendingDeletes = new Set((Storage._pendingDeletes[key] || []).map(String));
+                const tombstones = Storage._deletedTombstones[key] || {};
+                const result = new Map();
+
+                (localArr || []).forEach(item => {
+                    if (!item || item.id == null) return;
+                    const id = String(item.id);
+                    if (pendingDeletes.has(id) || tombstones[id]) return;
+                    result.set(id, Storage._clone(item));
+                });
+
+                (incomingArr || []).forEach(item => {
+                    if (!item || item.id == null) return;
+                    const id = String(item.id);
+                    if (pendingDeletes.has(id) || tombstones[id]) return;
+                    const incoming = Storage._clone(item);
+                    const local = result.get(id);
+                    if (!local) {
+                        result.set(id, incoming);
+                        return;
+                    }
+                    const localPending = !!local._pendienteSync;
+                    const localUpdated = Storage._normalizeUpdatedAt(local, 0);
+                    const incomingUpdated = Storage._normalizeUpdatedAt(incoming, 0);
+
+                    if (localPending && localUpdated >= incomingUpdated) return;
+                    if (incomingUpdated > localUpdated) {
+                        result.set(id, incoming);
+                        return;
+                    }
+                    if (!localPending && incomingUpdated === localUpdated) {
+                        const cleanLocal = JSON.stringify(Storage._stripSyncFlags(local));
+                        const cleanIncoming = JSON.stringify(Storage._stripSyncFlags(incoming));
+                        if (cleanIncoming !== cleanLocal) result.set(id, incoming);
+                    }
+                });
+
+                return Array.from(result.values()).filter(Boolean);
+            }
+
+            static _queueArraySync(key, currentValue) {
+                if (!_fbReady || !_db) return;
+                if (Storage._timers[key]) clearTimeout(Storage._timers[key]);
+                Storage._timers[key] = setTimeout(() => {
+                    showSyncBadge('pendiente');
+                    const currentArray = Array.isArray(currentValue) ? currentValue.filter(item => item && !Storage._hasDeletedTombstone(key, item.id)) : [];
+                    const updates = {};
+                    currentArray.forEach(item => {
+                        if (item && item.id != null && item._pendienteSync && !Storage._hasDeletedTombstone(k, item.id)) {
+                            updates[`costagas/${key}/${item.id}`] = Storage._stripSyncFlags(item);
+                        }
+                    });
+                    (Storage._pendingDeletes[key] || []).forEach(id => {
+                        updates[`costagas/${key}/${id}`] = null;
+                    });
+
+                    const finalizeSuccess = () => {
+                        const fresh = Storage.getArray(key).map(item => {
+                            if (!item || item.id == null) return item;
+                            if (!updates.hasOwnProperty(`costagas/${key}/${item.id}`)) return item;
+                            return Storage._stripSyncFlags(item);
+                        });
+                        localStorage.setItem(key, JSON.stringify(fresh));
+                        (Storage._pendingDeletes[key] || []).slice().forEach(id => Storage._clearPendingDelete(key, id));
+                        Storage._lastWrite[key] = Date.now();
+                        showSyncBadge('online');
+                    };
+
+                    if (Object.keys(updates).length === 0) {
+                        delete Storage._timers[key];
+                        showSyncBadge('online');
+                        return;
+                    }
+
+                    _db.ref().update(updates)
+                        .then(finalizeSuccess)
+                        .catch(() => showSyncBadge('offline'))
+                        .finally(() => { delete Storage._timers[key]; });
+                }, 120);
+            }
+
+            // Elimina un item por id dentro de una colección y lo borra también en Firebase directamente
+            static deleteItem(collectionKey, id) {
+                let arr = Storage.getArray(collectionKey).filter(item => item && String(item.id) !== String(id));
+                Storage._markPendingDelete(collectionKey, id);
+                Storage._markDeletedTombstone(collectionKey, id, { deletedAt: Date.now(), id: String(id) });
+                Storage._lastWrite[collectionKey] = Date.now() + 8000;
+                localStorage.setItem(collectionKey, JSON.stringify(arr));
+                if (_fbReady && _db) {
+                    const updates = {};
+                    updates[`costagas/${collectionKey}/${id}`] = null;
+                    updates[`costagas_deleted/${collectionKey}/${id}`] = { id: String(id), deletedAt: firebase.database.ServerValue.TIMESTAMP };
+                    _db.ref().update(updates)
+                        .then(() => {
+                            Storage._clearPendingDelete(collectionKey, id);
+                            Storage._lastWrite[collectionKey] = Date.now();
+                        })
+                        .catch(() => showSyncBadge('offline'));
+                }
+                return arr;
+            }
+
+            // Escritura: localStorage inmediato + Firebase solo con cambios reales
             static set(key, value) {
+                const previous = this.get(key);
+                const previousArray = Array.isArray(previous)
+                    ? previous.filter(v => v !== null && v !== undefined)
+                    : ((previous && typeof previous === 'object' && !Array.isArray(previous)) ? Object.values(previous).filter(v => v !== null && v !== undefined) : []);
+
+                if (Array.isArray(value)) {
+                    const nextArray = Storage._prepareArrayForWrite(key, previousArray, value);
+                    const prevMap = new Map(previousArray.filter(item => item && item.id != null).map(item => [String(item.id), item]));
+                    const nextMap = new Map(nextArray.filter(item => item && item.id != null).map(item => [String(item.id), item]));
+
+                    nextArray.forEach(item => {
+                        if (!item || item.id == null) return;
+                        const prevItem = prevMap.get(String(item.id));
+                        const cleanPrev = prevItem ? JSON.stringify(Storage._stripSyncFlags(prevItem)) : null;
+                        const cleanNext = JSON.stringify(Storage._stripSyncFlags(item));
+                        if (!prevItem || cleanPrev !== cleanNext || item._creadoOffline) {
+                            item._pendienteSync = true;
+                        }
+                    });
+
+                    prevMap.forEach((_, id) => {
+                        if (!nextMap.has(id)) Storage._markPendingDelete(key, id);
+                    });
+
+                    localStorage.setItem(key, JSON.stringify(nextArray));
+                    Storage._lastWrite[key] = Date.now();
+                    Storage._queueArraySync(key, nextArray);
+                    return;
+                }
+
                 localStorage.setItem(key, JSON.stringify(value));
                 Storage._lastWrite[key] = Date.now();
                 if (_fbReady && _db) {
                     if (Storage._timers[key]) clearTimeout(Storage._timers[key]);
                     Storage._timers[key] = setTimeout(() => {
                         showSyncBadge('pendiente');
-                        if (Array.isArray(value)) {
-                            const idsNuevos = new Set();
-                            const updates = {};
-                            value.forEach(item => {
-                                if (item && item.id != null) {
-                                    updates[`costagas/${key}/${item.id}`] = item;
-                                    idsNuevos.add(String(item.id));
-                                }
-                            });
-                            _db.ref(`costagas/${key}`).once('value').then(snap => {
-                                const fbData = snap.val();
-                                if (fbData && typeof fbData === 'object') {
-                                    Object.keys(fbData).forEach(fbId => {
-                                        if (!idsNuevos.has(String(fbId))) {
-                                            updates[`costagas/${key}/${fbId}`] = null;
-                                        }
-                                    });
-                                }
-                                if (Object.keys(updates).length > 0) {
-                                    _db.ref().update(updates)
-                                        .then(() => showSyncBadge('online'))
-                                        .catch(() => showSyncBadge('offline'));
-                                }
-                            }).catch(() => {
-                                if (Object.keys(updates).length > 0) {
-                                    _db.ref().update(updates).catch(() => showSyncBadge('offline'));
-                                }
-                            });
-                        } else {
-                            _db.ref(`costagas/${key}`).set(value)
-                                .then(() => showSyncBadge('online'))
-                                .catch(() => showSyncBadge('offline'));
-                        }
-                        delete Storage._timers[key];
-                    }, 80);
+                        _db.ref(`costagas/${key}`).set(value)
+                            .then(() => showSyncBadge('online'))
+                            .catch(() => showSyncBadge('offline'))
+                            .finally(() => { delete Storage._timers[key]; });
+                    }, 120);
                 }
             }
 
@@ -1344,6 +1544,8 @@
         }
         Storage._timers = {}; // debounce timers por clave Firebase
         Storage._lastWrite = {}; // timestamp de última escritura local por clave
+        Storage._pendingDeletes = JSON.parse(localStorage.getItem('_pendingDeletes') || '{}'); // ids pendientes de borrar en Firebase
+        Storage._deletedTombstones = JSON.parse(localStorage.getItem('_deletedTombstones') || '{}'); // ids borrados que no deben revivir
 
         // ==================== INICIALIZACIÓN Y LISTENERS FIREBASE ====================
         async function initFirebase(config) {
@@ -1386,23 +1588,37 @@
                     let changed = false;
                     Object.keys(all).forEach(key => {
                         if (Storage._timers[key]) return; // hay escritura local pendiente, ignorar
-                        // Ignorar datos de Firebase si hubo escritura local en los últimos 3 segundos
+                        // Ignorar datos de Firebase si hubo escritura local reciente
                         const lastWrite = Storage._lastWrite[key] || 0;
-                        if (Date.now() - lastWrite < 3000) return;
+                        if (Date.now() - lastWrite < 8000) return;
                         let incoming = all[key];
                         // Si Firebase devuelve un objeto con ids (no array nativo), convertir a array
                         // ✅ FIX: filtrar nulls — nodos eliminados en Firebase llegan como null
                         // sin este filtro, productos eliminados "resucitan" desde otros dispositivos
                         // ✅ FIX CAJA: caja es objeto plano {estado,montoInicial...} — NO convertir con Object.values
                         const esClave_caja = (key === 'caja' || key.startsWith('caja_u'));
-                        if (!esClave_caja && incoming && typeof incoming === 'object' && !Array.isArray(incoming)) {
-                            incoming = Object.values(incoming).filter(v => v !== null && v !== undefined);
-                        }
-                        const incomingStr = JSON.stringify(incoming);
-                        const current = localStorage.getItem(key);
-                        if (current !== incomingStr) {
-                            localStorage.setItem(key, incomingStr);
-                            changed = true;
+                        if (!esClave_caja) {
+                            const incomingArray = Array.isArray(incoming)
+                                ? incoming.filter(v => v !== null && v !== undefined)
+                                : ((incoming && typeof incoming === 'object')
+                                    ? Object.entries(incoming)
+                                        .filter(([id, v]) => v !== null && v !== undefined && !(Storage._pendingDeletes[key] || []).includes(String(id)))
+                                        .map(([, v]) => v)
+                                    : []);
+                            const merged = Storage._mergeArrayByUpdatedAt(key, Storage.getArray(key), incomingArray);
+                            const mergedStr = JSON.stringify(merged);
+                            const current = localStorage.getItem(key);
+                            if (current !== mergedStr) {
+                                localStorage.setItem(key, mergedStr);
+                                changed = true;
+                            }
+                        } else {
+                            const incomingStr = JSON.stringify(incoming);
+                            const current = localStorage.getItem(key);
+                            if (current !== incomingStr) {
+                                localStorage.setItem(key, incomingStr);
+                                changed = true;
+                            }
                         }
                     });
                     if (changed && currentUser) {
@@ -1413,6 +1629,33 @@
                     }
                 }, (error) => {
                     console.warn('Error listener costagas:', error.message);
+                });
+
+                _db.ref('costagas_deleted').on('value', (snapshot) => {
+                    const deletedAll = snapshot.val() || {};
+                    let changedDeleted = false;
+                    Object.keys(deletedAll).forEach(key => {
+                        const bucket = deletedAll[key] || {};
+                        Object.keys(bucket).forEach(id => {
+                            if (!Storage._hasDeletedTombstone(key, id)) {
+                                Storage._markDeletedTombstone(key, id, bucket[id]);
+                            }
+                        });
+                        const clean = Storage._purgeDeletedFromLocal(key);
+                        const current = localStorage.getItem(key);
+                        const cleanStr = JSON.stringify(clean);
+                        if (current !== cleanStr) {
+                            localStorage.setItem(key, cleanStr);
+                            changedDeleted = true;
+                        }
+                    });
+                    if (changedDeleted && currentUser) {
+                        updateDashboard();
+                        const modalAbierto = document.querySelector('.modal.active');
+                        if (!modalAbierto) refreshActiveModule();
+                    }
+                }, (error) => {
+                    console.warn('Error listener costagas_deleted:', error.message);
                 });
 
                 // ⚡ OPTIMIZACIÓN: Login inmediato — sincronización en segundo plano
@@ -1469,13 +1712,22 @@
                         DB_KEYS.forEach(k => {
                             if (cloudData[k] === undefined) return;
                             const val = fbNodoAArray(cloudData[k]);
-                            localStorage.setItem(k, JSON.stringify(val));
+                            if (Array.isArray(val)) {
+                                localStorage.setItem(k, JSON.stringify(Storage._mergeArrayByUpdatedAt(k, Storage.getArray(k), val)));
+                            } else {
+                                localStorage.setItem(k, JSON.stringify(val));
+                            }
                         });
                         Object.keys(cloudData).forEach(k => {
                             if (!k.startsWith('caja_u')) return;
                             const val = fbNodoAArray(cloudData[k]);
-                            localStorage.setItem(k, JSON.stringify(val));
+                            if (Array.isArray(val)) {
+                                localStorage.setItem(k, JSON.stringify(Storage._mergeArrayByUpdatedAt(k, Storage.getArray(k), val)));
+                            } else {
+                                localStorage.setItem(k, JSON.stringify(val));
+                            }
                         });
+                        Object.keys(Storage._deletedTombstones).forEach(k => Storage._purgeDeletedFromLocal(k));
                         if (currentUser) { updateDashboard(); refreshActiveModule(); }
                     }
                     showSyncBadge('online');
@@ -1493,48 +1745,42 @@
             }
         }
 
-        // Sube datos locales a Firebase — respeta eliminaciones de la nube antes de subir
+        // Sube a Firebase solo los cambios pendientes para no revivir datos viejos
         function sincronizarDatosLocales() {
             if (!_fbReady || !_db) return;
-            // Primero leer Firebase para saber qué fue eliminado por otros dispositivos
-            _db.ref('costagas').once('value').then(snap => {
-                const cloudData = snap.val() || {};
-                const allKeys = [...DB_KEYS, ...Object.keys(localStorage).filter(k => k.startsWith('caja_u'))];
-                const updates = {};
+            const allKeys = [...DB_KEYS, ...Object.keys(localStorage).filter(k => k.startsWith('caja_u'))];
+            const updates = {};
+            allKeys.forEach(k => {
+                const local = Storage.get(k);
+                if (Array.isArray(local)) {
+                    local.filter(Boolean).forEach(item => {
+                        if (item && item.id != null && item._pendienteSync && !Storage._hasDeletedTombstone(k, item.id)) {
+                            updates[`costagas/${k}/${item.id}`] = Storage._stripSyncFlags(item);
+                        }
+                    });
+                    (Storage._pendingDeletes[k] || []).forEach(id => {
+                        updates[`costagas/${k}/${id}`] = null;
+                        updates[`costagas_deleted/${k}/${id}`] = { id: String(id), deletedAt: firebase.database.ServerValue.TIMESTAMP };
+                    });
+                } else if (local !== null && local !== undefined) {
+                    updates[`costagas/${k}`] = local;
+                }
+            });
+            if (Object.keys(updates).length === 0) {
+                showSyncBadge('online');
+                return;
+            }
+            _db.ref().update(updates).then(() => {
                 allKeys.forEach(k => {
                     const local = Storage.get(k);
-                    if (!local) return;
                     if (Array.isArray(local)) {
-                        const cloudNodo = cloudData[k] || {};
-                        // Solo subir items que YA EXISTEN en Firebase o son nuevos (creados offline)
-                        // NO subir items que Firebase ya eliminó (no están en cloudNodo y tampoco tienen _creadoOffline)
-                        const idsEnNube = new Set(Object.keys(cloudNodo).map(String));
-                        local.forEach(item => {
-                            if (item && item.id != null) {
-                                const idStr = String(item.id);
-                                // Subir si: existe en nube, o fue marcado como creado offline
-                                if (idsEnNube.has(idStr) || item._creadoOffline) {
-                                    updates[`costagas/${k}/${item.id}`] = item;
-                                }
-                            }
-                        });
-                        // Si la nube está vacía en esta clave (nunca hubo datos), subir todo
-                        if (idsEnNube.size === 0) {
-                            local.forEach(item => {
-                                if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
-                            });
-                        }
-                    } else {
-                        updates[`costagas/${k}`] = local;
+                        const clean = local.filter(Boolean).map(item => Storage._stripSyncFlags(item));
+                        localStorage.setItem(k, JSON.stringify(clean));
                     }
+                    (Storage._pendingDeletes[k] || []).slice().forEach(id => Storage._clearPendingDelete(k, id));
+                    Storage._lastWrite[k] = Date.now();
                 });
-                if (Object.keys(updates).length > 0) {
-                    _db.ref().update(updates)
-                        .then(() => showSyncBadge('online'))
-                        .catch(() => showSyncBadge('offline'));
-                } else {
-                    showSyncBadge('online');
-                }
+                showSyncBadge('online');
             }).catch(() => showSyncBadge('offline'));
         }
 
@@ -1546,17 +1792,38 @@
                 const updates = {};
                 allKeys.forEach(k => {
                     const val = Storage.get(k);
-                    if (!val) return;
+                    if (val === null || val === undefined) return;
                     if (Array.isArray(val)) {
                         val.forEach(item => {
-                            if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
+                            if (item && item.id != null && !Storage._hasDeletedTombstone(k, item.id)) {
+                                updates[`costagas/${k}/${item.id}`] = Storage._stripSyncFlags(item);
+                            }
+                        });
+                        (Storage._pendingDeletes[k] || []).forEach(id => {
+                            updates[`costagas/${k}/${id}`] = null;
+                            updates[`costagas_deleted/${k}/${id}`] = { id: String(id), deletedAt: firebase.database.ServerValue.TIMESTAMP };
                         });
                     } else {
                         updates[`costagas/${k}`] = val;
                     }
                 });
+                if (Object.keys(updates).length === 0) {
+                    showNotification('✅ No hay cambios pendientes', 'success');
+                    return;
+                }
                 _db.ref().update(updates)
-                    .then(() => showNotification('✅ Datos guardados en la nube', 'success'))
+                    .then(() => {
+                        allKeys.forEach(k => {
+                            const local = Storage.get(k);
+                            if (Array.isArray(local)) {
+                                const clean = local.filter(Boolean).map(item => Storage._stripSyncFlags(item));
+                                localStorage.setItem(k, JSON.stringify(clean));
+                            }
+                            (Storage._pendingDeletes[k] || []).slice().forEach(id => Storage._clearPendingDelete(k, id));
+                            Storage._lastWrite[k] = Date.now();
+                        });
+                        showNotification('✅ Datos guardados en la nube', 'success');
+                    })
                     .catch(() => showNotification('⚠️ Error al guardar en la nube', 'error'));
             } else {
                 showNotification('✅ Datos guardados localmente', 'success');
@@ -1577,11 +1844,24 @@
                         return val;
                     }
                     DB_KEYS.forEach(k => {
-                        if (all[k] !== undefined) localStorage.setItem(k, JSON.stringify(fbNodoAArray(all[k])));
+                        if (all[k] === undefined) return;
+                        const val = fbNodoAArray(all[k]);
+                        if (Array.isArray(val)) {
+                            localStorage.setItem(k, JSON.stringify(Storage._mergeArrayByUpdatedAt(k, Storage.getArray(k), val)));
+                        } else {
+                            localStorage.setItem(k, JSON.stringify(val));
+                        }
                     });
                     Object.keys(all).forEach(k => {
-                        if (k.startsWith('caja_u')) localStorage.setItem(k, JSON.stringify(fbNodoAArray(all[k])));
+                        if (!k.startsWith('caja_u')) return;
+                        const val = fbNodoAArray(all[k]);
+                        if (Array.isArray(val)) {
+                            localStorage.setItem(k, JSON.stringify(Storage._mergeArrayByUpdatedAt(k, Storage.getArray(k), val)));
+                        } else {
+                            localStorage.setItem(k, JSON.stringify(val));
+                        }
                     });
+                    Object.keys(Storage._deletedTombstones).forEach(k => Storage._purgeDeletedFromLocal(k));
                     updateDashboard();
                     refreshActiveModule();
                     showNotification('✅ Datos actualizados', 'success');
@@ -4020,13 +4300,63 @@
             return nuevoCliente.id;
         }
 
-        function descontarStock() {
+        function getCantidadPedidosPorProducto(productoId) {
+            return Storage.getArray('pedidos').reduce((total, p) => {
+                const items = Array.isArray(p?.items) ? p.items : [];
+                return total + items.reduce((s, it) => s + (parseInt(it?.id) === parseInt(productoId) ? (Number(it.cantidad) || 0) : 0), 0);
+            }, 0);
+        }
+
+        function getCantidadEntradasPorProducto(productoId) {
+            const compras = Storage.getArray('compras').reduce((total, c) => total + (parseInt(c?.productoId) === parseInt(productoId) ? (Number(c.cantidad) || 0) : 0), 0);
+            const ingresos = Storage.getArray('ingresos').reduce((total, i) => total + (parseInt(i?.productoId) === parseInt(productoId) ? (Number(i.cantidad) || 0) : 0), 0);
+            return compras + ingresos;
+        }
+
+        function getAjusteStockNeto(productoId) {
+            return Storage.getArray('stockAjustes').reduce((total, a) => total + (parseInt(a?.productoId) === parseInt(productoId) ? (Number(a.ajusteNeto) || 0) : 0), 0);
+        }
+
+        function getMovimientosNetosSinBase(productoId) {
+            return getCantidadEntradasPorProducto(productoId) + getAjusteStockNeto(productoId) - getCantidadPedidosPorProducto(productoId);
+        }
+
+        function obtenerStockCalculadoProducto(producto) {
+            if (!producto) return 0;
+            const base = Number(producto.stockBase ?? producto.stock ?? 0);
+            const neto = getMovimientosNetosSinBase(producto.id);
+            return Math.round((base + neto) * 1000) / 1000;
+        }
+
+        function asegurarBaseStockProductos() {
             const productos = Storage.getArray('productos');
-            carritoActual.forEach(item => {
-                const producto = productos.find(p => p.id === item.id);
-                if (producto) producto.stock -= item.cantidad;
+            let changed = false;
+            productos.forEach(p => {
+                if (p && (p.stockBase === undefined || p.stockBase === null || Number.isNaN(Number(p.stockBase)))) {
+                    p.stockBase = Number(p.stock || 0);
+                    changed = true;
+                }
             });
-            Storage.set('productos', productos);
+            if (changed) Storage.set('productos', productos);
+            return productos;
+        }
+
+        function recalcularTodoElStock(silent = false) {
+            const productos = asegurarBaseStockProductos();
+            let changed = false;
+            productos.forEach(p => {
+                const nuevoStock = obtenerStockCalculadoProducto(p);
+                if (Number(p.stock) !== Number(nuevoStock)) {
+                    p.stock = nuevoStock;
+                    changed = true;
+                }
+            });
+            if (changed) Storage.set('productos', productos);
+            if (!silent) showNotification('✅ Stock recalculado desde historial', 'success');
+        }
+
+        function descontarStock() {
+            recalcularTodoElStock(true);
         }
 
         // ✅ NUEVA FUNCIÓN: registra cilindros prestados en Fierros desde cualquier tipo de pedido
@@ -4396,11 +4726,8 @@
                 showNotification('No se puede eliminar el usuario administrador principal', 'error');
                 return;
             }
-            
             if (confirm('¿Está seguro de eliminar este usuario?')) {
-                let usuarios = Storage.getArray('usuarios');
-                usuarios = usuarios.filter(u => u.id !== id);
-                Storage.set('usuarios', usuarios);
+                Storage.deleteItem('usuarios', id);
                 showNotification('Usuario eliminado', 'success');
                 setTimeout(() => renderUsuarios(), 100);
             }
@@ -4952,6 +5279,9 @@
             if (!confirm(`⚠ Se borrarán los datos de:\n\n${lista}\n\n¿Confirmas?`)) return;
             if (!confirm(`🗑 ÚLTIMA ADVERTENCIA: Se borrarán permanentemente.\n\n¿Seguro?`)) return;
 
+            // ✅ FIX: Pausar listener antes de borrar para evitar que Firebase restaure los datos
+            if (_fbReady && _db) _db.ref('costagas').off();
+
             // Borrar de localStorage
             const extraKeys = [];
             if (modulos.includes('pedidos') || modulos.includes('ventas')) {
@@ -4959,7 +5289,7 @@
             }
             [...new Set([...modulos, ...extraKeys])].forEach(k => localStorage.removeItem(k));
 
-            // Borrar de Firebase
+            // Borrar de Firebase nodo por nodo
             if (_fbReady && _db) {
                 try {
                     await Promise.all(modulos.map(k => _db.ref(`costagas/${k}`).remove()));
@@ -4977,6 +5307,11 @@
             // Segunda confirmación para evitar accidentes
             if (!confirm('🗑 ÚLTIMA ADVERTENCIA: Se borrarán todos los datos permanentemente.\n\n¿Confirmas que quieres reiniciar la base de datos?')) return;
 
+            // ✅ FIX: Pausar listener de Firebase antes de borrar para que no restaure datos
+            if (_fbReady && _db) {
+                _db.ref('costagas').off();
+            }
+
             // Guardar config Firebase antes de borrar (para no perderla)
             const fbConfig = localStorage.getItem('_firebaseConfig');
 
@@ -4986,7 +5321,7 @@
                 'fierros','pedidos','ventas','compras','gastos','ingresos','creditos',
                 'caja','ingresosCaja','cilindrosPrestados','cilindrosDeudas',
                 'fierrosKardex','fierrosDebo','fierrosMeDeben','cierresCaja',
-                'cilindrosConfig'
+                'cilindrosConfig','_sistemaInicializado'
             ];
             // También borrar cajas de usuarios (caja_u*)
             Object.keys(localStorage).forEach(k => {
@@ -5003,10 +5338,11 @@
             // Restaurar config Firebase si existía
             if (fbConfig) localStorage.setItem('_firebaseConfig', fbConfig);
 
-            // Reinicializar datos base (admin default)
+            // Reinicializar SOLO el usuario admin (sin datos de ejemplo)
+            localStorage.setItem('_sistemaInicializado', 'true'); // ✅ evita recrear datos demo
             initializeData();
 
-            showNotification('✅ Base de datos reiniciada. Sistema listo para pruebas.', 'success');
+            showNotification('✅ Base de datos reiniciada. Sistema listo.', 'success');
 
             // Hacer logout limpio
             currentUser = null;
@@ -5289,6 +5625,7 @@
         // Por brevedad, incluiré versiones simplificadas
 
         function renderProductos() {
+            recalcularTodoElStock(true);
             const productos = Storage.getArray('productos');
             const content = `
                 <div class="module-header">
@@ -5297,7 +5634,7 @@
                 </div>
                 <div class="card">
                     <div class="flex justify-between items-center mb-4" style="flex-wrap:wrap;gap:10px;">
-                        <button onclick="mostrarFormProducto()" class="btn btn-primary">+ NUEVO PRODUCTO</button>
+                        <div class="flex gap-2" style="flex-wrap:wrap;"><button onclick="mostrarFormProducto()" class="btn btn-primary">+ NUEVO PRODUCTO</button><button onclick="recalcularTodoElStock()" class="btn btn-info">🔄 REPARAR STOCK</button></div>
                         <input type="text" id="buscarProducto" placeholder="Buscar producto..." onkeyup="filtrarProductos()" style="padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;min-width:220px;">
                     </div>
                     <table id="tablaProductos">
@@ -5452,23 +5789,29 @@
             event.preventDefault();
             const productos = Storage.getArray('productos');
             const id = document.getElementById('productoId').value;
+            const stockDeseado = parseFloat(document.getElementById('productoStock').value) || 0;
             const data = {
                 nombre: document.getElementById('productoNombre').value,
                 categoria: document.getElementById('productoCategoria').value,
                 precio: parseFloat(document.getElementById('productoPrecio').value),
-                stock: parseInt(document.getElementById('productoStock').value),
+                stock: stockDeseado,
                 stockMin: parseInt(document.getElementById('productoStockMin').value),
                 descripcion: document.getElementById('productoDesc').value
             };
             if (id) {
                 const idx = productos.findIndex(p => p.id === parseInt(id));
-                productos[idx] = { ...productos[idx], ...data };
+                const actual = productos[idx];
+                const neto = getMovimientosNetosSinBase(actual.id);
+                data.stockBase = stockDeseado - neto;
+                productos[idx] = { ...actual, ...data };
             } else {
                 data.id = generateId();
+                data.stockBase = stockDeseado;
                 if (!_fbReady || !_db) data._creadoOffline = true;
                 productos.push(data);
             }
             Storage.set('productos', productos);
+            recalcularTodoElStock(true);
             cerrarModal('modalProducto');
             showNotification('Producto guardado exitosamente', 'success');
             renderProductos();
@@ -5476,9 +5819,7 @@
 
         function eliminarProducto(id) {
             if (!confirm('¿Eliminar este producto?')) return;
-            let productos = Storage.getArray('productos');
-            productos = productos.filter(p => p.id !== id);
-            Storage.set('productos', productos);
+            Storage.deleteItem('productos', id);
             showNotification('Producto eliminado', 'success');
             renderProductos();
         }
@@ -5496,13 +5837,28 @@
         function confirmarAjusteStock() {
             const id = parseInt(document.getElementById('stockProductoId').value);
             const operacion = document.getElementById('stockOperacion').value;
-            const cantidad = parseInt(document.getElementById('stockCantidad').value) || 0;
+            const cantidad = parseFloat(document.getElementById('stockCantidad').value) || 0;
             const productos = Storage.getArray('productos');
             const p = productos.find(x => x.id === id);
-            if (operacion === 'sumar') p.stock += cantidad;
-            else if (operacion === 'restar') p.stock = p.stock - cantidad; // ✅ FIX: permite stock negativo
-            else p.stock = cantidad;
-            Storage.set('productos', productos);
+            if (!p) return;
+            const stockActual = obtenerStockCalculadoProducto(p);
+            let ajusteNeto = 0;
+            if (operacion === 'sumar') ajusteNeto = cantidad;
+            else if (operacion === 'restar') ajusteNeto = -cantidad;
+            else ajusteNeto = cantidad - stockActual;
+            const ajustes = Storage.getArray('stockAjustes');
+            ajustes.push({
+                id: generateId(),
+                productoId: id,
+                productoNombre: p.nombre,
+                operacion,
+                cantidad,
+                ajusteNeto,
+                fecha: getCurrentDateTime(),
+                usuario: currentUser?.nombre || 'Sistema'
+            });
+            Storage.set('stockAjustes', ajustes);
+            recalcularTodoElStock(true);
             cerrarModal('modalStock');
             showNotification('Stock actualizado', 'success');
             renderProductos();
@@ -5743,9 +6099,7 @@
 
         function eliminarCliente(id) {
             if (!confirm('¿Eliminar este cliente?')) return;
-            let clientes = Storage.getArray('clientes');
-            clientes = clientes.filter(c => c.id !== id);
-            Storage.set('clientes', clientes);
+            Storage.deleteItem('clientes', id);
             showNotification('Cliente eliminado', 'success');
             renderClientes();
         }
@@ -6167,7 +6521,7 @@
 
         function eliminarProveedor(id) {
             if (!confirm('¿Eliminar este proveedor?')) return;
-            Storage.set('proveedores', Storage.getArray('proveedores').filter(p => p.id !== id));
+            Storage.deleteItem('proveedores', id);
             showNotification('Proveedor eliminado', 'success');
             renderProveedores();
         }
@@ -6456,12 +6810,11 @@
                 usuario: currentUser.nombre
             };
 
-            if (compra.productoId) {
+            if (compra.productoId && actualizarPrecio === 'si') {
                 const productos = Storage.getArray('productos');
                 const prod = productos.find(p => p.id === compra.productoId);
                 if (prod) {
-                    prod.stock += cant;
-                    if (actualizarPrecio === 'si') prod.precio = precioUnit;
+                    prod.precio = precioUnit;
                     Storage.set('productos', productos);
                 }
             }
@@ -6469,6 +6822,7 @@
             const compras = Storage.getArray('compras');
             compras.push(compra);
             Storage.set('compras', compras);
+            recalcularTodoElStock(true);
             cerrarModal('modalCompra');
             showNotification('Compra registrada' + (estadoPago === 'credito' ? ' — Crédito a proveedor guardado' : '') , 'success');
             renderCompras();
@@ -6611,9 +6965,7 @@
 
         function eliminarGasto(id) {
             if (!confirm('¿Eliminar este gasto?')) return;
-            let gastos = Storage.getArray('gastos');
-            gastos = gastos.filter(g => g.id !== id);
-            Storage.set('gastos', gastos);
+            Storage.deleteItem('gastos', id);
             showNotification('Gasto eliminado', 'success');
             renderGastos();
         }
@@ -6916,9 +7268,8 @@
         // ✅ ELIMINAR INGRESO
         function eliminarIngreso(id) {
             if (!confirm('¿Eliminar este ingreso de mercadería? Esta acción no se puede deshacer.')) return;
-            let ingresos = Storage.getArray('ingresos');
-            ingresos = ingresos.filter(i => i.id !== id);
-            Storage.set('ingresos', ingresos);
+            Storage.deleteItem('ingresos', id);
+            recalcularTodoElStock(true);
             showNotification('✅ Ingreso eliminado', 'success');
             renderIngresos();
         }
@@ -7034,6 +7385,7 @@
                 observaciones: document.getElementById('eiObs').value
             };
             Storage.set('ingresos', ingresos);
+            recalcularTodoElStock(true);
             document.getElementById('modalEditarIngreso').remove();
             showNotification('✅ Ingreso actualizado correctamente', 'success');
             renderIngresos();
@@ -7184,15 +7536,7 @@
                 movVacio: movVacio !== 'ninguno' ? { tipo: movVacio, capacidad: vacioTipo, cantidad: vacioCant } : null
             };
 
-            // ── Actualizar stock del producto (llenos recibidos) ──────
-            if (ingreso.productoId) {
-                const productos = Storage.getArray('productos');
-                const prod = productos.find(p => p.id === ingreso.productoId);
-                if (prod) { prod.stock += cant; }
-                Storage.set('productos', productos);
-                // Al recibir llenos, fierro_getLlenos sube automáticamente y
-                // Vacíos = Stock − Llenos baja exactamente en `cant` → no tocar el stock de vacíos aquí
-            }
+            // ── El stock ahora se recalcula por historial (ingresos/compras/pedidos/ajustes) ──────
 
             // ── Movimiento de vacíos → módulo Fierros ────────────────
             if (movVacio !== 'ninguno' && vacioCant > 0) {
@@ -7237,6 +7581,7 @@
             const ingresos = Storage.getArray('ingresos');
             ingresos.push(ingreso);
             Storage.set('ingresos', ingresos);
+            recalcularTodoElStock(true);
             cerrarModal('modalIngreso');
 
             let notif = 'Ingreso registrado' + (estadoPago === 'credito' ? ' — Crédito a proveedor guardado' : '');
@@ -7863,9 +8208,7 @@
 
         function eliminarTrabajador(id) {
             if (!confirm('¿Eliminar este trabajador? Esta acción no se puede deshacer.')) return;
-            let trabajadores = Storage.getArray('trabajadores');
-            trabajadores = trabajadores.filter(t => t.id !== id);
-            Storage.set('trabajadores', trabajadores);
+            Storage.deleteItem('trabajadores', id);
             showNotification('Trabajador eliminado', 'success');
             renderTrabajadores();
         }
@@ -8032,7 +8375,7 @@
 
         function eliminarTrabajador(id) {
             if (!confirm('¿Eliminar este trabajador? Se perderá todo su historial.')) return;
-            Storage.set('trabajadores', Storage.getArray('trabajadores').filter(t => t.id !== id));
+            Storage.deleteItem('trabajadores', id);
             showNotification('Trabajador eliminado', 'success');
             renderTrabajadores();
         }
@@ -8197,8 +8540,7 @@
                     Storage.set(getCajaKey(), caja);
                 }
             }
-            ingresosCaja = ingresosCaja.filter(i => i.id !== id);
-            Storage.set('ingresosCaja', ingresosCaja);
+            Storage.deleteItem('ingresosCaja', id);
             showNotification('Ingreso eliminado', 'success');
             renderIngresosCaja();
         }
@@ -8803,7 +9145,7 @@
         function fierroEliminar(tabla, id) {
             if (!confirm('¿Eliminar este registro?')) return;
             const key = tabla === 'debo' ? 'fierrosDebo' : 'fierrosMeDeben';
-            Storage.set(key, Storage.getArray(key).filter(x => x.id !== id));
+            Storage.deleteItem(key, id);
             showNotification('Registro eliminado', 'success');
             renderFierros();
         }
@@ -9689,9 +10031,26 @@
             const hasta  = document.getElementById('ganPedHasta')?.value;
             if (!desde || !hasta) return;
 
-            // PEPS reutilizado pero pedido a pedido
-            const compras  = Storage.getArray('compras').slice().sort((a,b) => a.fecha.localeCompare(b.fecha));
-            const ingresos = Storage.getArray('ingresos').slice().sort((a,b) => a.fecha.localeCompare(b.fecha));
+            const movimientos = [
+                ...Storage.getArray('compras').map(c => ({
+                    fecha: c.fecha || '',
+                    productoId: c.productoId || null,
+                    productoNombre: c.productoNombre || c.nombre || '',
+                    cantidad: Number(c.cantidad || 0),
+                    costo: Number(c.precioUnit || c.precioUni || c.costo || 0),
+                    origen: 'compra'
+                })),
+                ...Storage.getArray('ingresos').map(i => ({
+                    fecha: i.fecha || '',
+                    productoId: i.productoId || null,
+                    productoNombre: i.productoNombre || i.nombre || '',
+                    cantidad: Number(i.cantidad || 0),
+                    costo: Number(i.precioUni || i.precioUnit || i.costo || 0),
+                    origen: 'ingreso'
+                }))
+            ].filter(m => m.cantidad > 0 && m.costo > 0)
+             .sort((a,b) => (a.fecha || '').localeCompare(b.fecha || ''));
+
             const pedidos  = getPedidosPropios(Storage.getArray('pedidos'))
                              .filter(p => p.fecha.substring(0,10) >= desde && p.fecha.substring(0,10) <= hasta)
                              .slice().sort((a,b) => a.fecha.localeCompare(b.fecha));
@@ -9699,12 +10058,11 @@
             const gastos    = Storage.getArray('gastos')
                              .filter(g => g.fecha.substring(0,10) >= desde && g.fecha.substring(0,10) <= hasta);
 
-            // Cola FIFO
             const fifoById  = {};
             const fifoByNom = {};
-            function agregarLote(productoId, productoNombre, cantidad, costo) {
+            function agregarLote(productoId, productoNombre, cantidad, costo, fecha, origen) {
                 if (!cantidad || !costo) return;
-                const lote = { costo, disponible: cantidad };
+                const lote = { costo, disponible: cantidad, fecha: (fecha || '').substring(0,10), origen: origen || '' };
                 if (productoId) {
                     if (!fifoById[productoId]) fifoById[productoId] = [];
                     fifoById[productoId].push(lote);
@@ -9714,57 +10072,70 @@
                     fifoByNom[nom].push(lote);
                 }
             }
-            compras.forEach(c => agregarLote(c.productoId, c.productoNombre, c.cantidad, c.precioUnit));
-            ingresos.forEach(i => agregarLote(i.productoId, i.productoNombre, i.cantidad, i.precioUni));
+            movimientos.forEach(m => agregarLote(m.productoId, m.productoNombre, m.cantidad, m.costo, m.fecha, m.origen));
 
-            function consumirFIFO(id, nombreNorm, cantidad) {
+            function consumirFIFOConDetalle(id, nombreNorm, cantidad) {
                 let cola = (id && fifoById[id]) ? fifoById[id] : (fifoByNom[nombreNorm] || []);
-                let cantRestante = cantidad, costoTotal = 0;
+                let cantRestante = Number(cantidad || 0);
+                let costoTotal = 0;
+                const detalle = [];
                 while (cantRestante > 0 && cola.length > 0) {
                     const lote = cola[0];
                     const consume = Math.min(cantRestante, lote.disponible);
                     costoTotal += consume * lote.costo;
+                    detalle.push({
+                        cantidad: consume,
+                        costo: lote.costo,
+                        fecha: lote.fecha || 'Sin fecha'
+                    });
                     lote.disponible -= consume;
                     cantRestante -= consume;
                     if (lote.disponible <= 0) cola.shift();
                 }
-                return costoTotal;
+                return { costoTotal, detalle, sinCosto: cantRestante };
             }
 
             let totalVentas = 0, totalCosto = 0;
             const rows = pedidos.map(p => {
-                let ventaPed = 0, costoPed = 0;
+                let ventaPed = 0, costoPed = 0, sinCostoPed = 0;
                 const itemsDesc = (p.items||[]).map(item => {
                     const nombreNorm = (item.nombre||'').trim().toLowerCase();
-                    const prod = productos.find(pr => pr.nombre.trim().toLowerCase() === nombreNorm);
+                    const prod = productos.find(pr => (pr.nombre||'').trim().toLowerCase() === nombreNorm);
                     const prodId = item.id || (prod ? prod.id : null);
-                    const venta = (item.precio||0) * (item.cantidad||1);
-                    const costo = consumirFIFO(prodId, nombreNorm, item.cantidad||1);
+                    const cantidad = Number(item.cantidad || 1);
+                    const venta = Number(item.precio || 0) * cantidad;
+                    const consumo = consumirFIFOConDetalle(prodId, nombreNorm, cantidad);
+                    const costo = consumo.costoTotal;
                     ventaPed += venta;
                     costoPed += costo;
-                    return item.nombre + ' x' + item.cantidad;
-                }).join(', ');
+                    sinCostoPed += consumo.sinCosto;
+                    const detalleTxt = consumo.detalle.length
+                        ? consumo.detalle.map(d => `${d.cantidad} de ${d.fecha} @ ${formatCurrency(d.costo)}`).join(' + ')
+                        : 'Sin lote registrado';
+                    const aviso = consumo.sinCosto > 0 ? ` <span style="color:#ff6f00;">(faltan ${consumo.sinCosto} u. sin costo)</span>` : '';
+                    return `<div style="margin-bottom:4px;"><strong>${item.nombre}</strong> x${cantidad}<br><span style="font-size:11px;color:#666;">Toma por fecha: ${detalleTxt}${aviso}</span></div>`;
+                }).join('');
                 totalVentas += ventaPed;
                 totalCosto  += costoPed;
                 const gan = ventaPed - costoPed;
                 const tipoColor = p.tipoPago === 'credito' ? '#e65100' : p.tipoPago === 'mixto' ? '#7b1fa2' : '#2d5016';
                 const tipoLabel = p.tipoPago === 'credito' ? '📋 Crédito' : p.tipoPago === 'mixto' ? '🔀 Mixto' : '✅ Contado';
+                const gananciaHtml = `${formatCurrency(gan)}${sinCostoPed > 0 ? `<div style="font-size:11px;color:#ff6f00;">⚠ ${sinCostoPed} u. sin costo</div>` : ''}`;
                 return `<tr>
                     <td style="font-size:12px;white-space:nowrap;">${(p.fecha||'').substring(0,16)}</td>
                     <td><strong>${p.clienteNombre||'—'}</strong></td>
                     <td><span style="font-size:12px;font-weight:700;color:${tipoColor};">${tipoLabel}</span></td>
-                    <td style="font-size:12px;color:#555;">${itemsDesc}</td>
+                    <td style="font-size:12px;color:#555;min-width:270px;">${itemsDesc}</td>
                     <td style="font-weight:700;color:#2d5016;">${formatCurrency(ventaPed)}</td>
                     <td style="color:#f44336;">${formatCurrency(costoPed)}</td>
-                    <td style="font-weight:700;font-size:15px;color:${gan>=0?'#1b5e20':'#b71c1c'};">${formatCurrency(gan)}</td>
+                    <td style="font-weight:700;font-size:15px;color:${gan>=0?'#1b5e20':'#b71c1c'};">${gananciaHtml}</td>
                 </tr>`;
             }).join('');
 
-            const totalGastos = gastos.reduce((s,g)=>s+g.monto,0);
+            const totalGastos = gastos.reduce((s,g)=>s+Number(g.monto||0),0);
             const ganBruta = totalVentas - totalCosto;
             const ganNeta  = ganBruta - totalGastos;
 
-            // Fila total
             const rowTotal = pedidos.length > 0 ? `<tr style="background:#e8f5e9;font-family:'Russo One',sans-serif;">
                 <td colspan="4"><strong>TOTAL (${pedidos.length} pedidos)</strong></td>
                 <td style="color:#2d5016;font-weight:700;">${formatCurrency(totalVentas)}</td>
@@ -9775,7 +10146,6 @@
             document.getElementById('ganPedBody').innerHTML =
                 (rows + rowTotal) || '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">Sin pedidos en ese rango</td></tr>';
 
-            // Actualizar cuadros resumen
             document.getElementById('ganPedBoxVentas').textContent = formatCurrency(totalVentas);
             document.getElementById('ganPedBoxCosto').textContent  = formatCurrency(totalCosto);
             const brutaEl = document.getElementById('ganPedBoxBruta');
@@ -9856,42 +10226,12 @@
                     </div>
                 </div>
 
-                <!-- SECCIÓN GANANCIA PEPS -->
-                <div class="card" style="margin-bottom:20px;border-left:6px solid #1b5e20;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;">
-                        <div>
-                            <h3 style="font-family:'Russo One',sans-serif;color:#1b5e20;font-size:22px;">💰 GANANCIA POR PRODUCTO (MÉTODO PEPS)</h3>
-                            <p style="color:#777;font-size:13px;margin-top:4px;">Precio de venta real de cada pedido − Costo de compra (primero que entró, primero que sale)</p>
-                        </div>
-                        <div style="font-size:28px;font-weight:700;font-family:'Russo One',sans-serif;" id="gananciaTotalResumen">S/. 0.00</div>
-                    </div>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
-                        <div>
-                            <label style="font-weight:700;font-size:14px;display:block;margin-bottom:4px;">Desde:</label>
-                            <input type="date" id="gananciaDesde" value="${hoy}" onchange="actualizarGananciaPEPS()" style="padding:8px 12px;border:2px solid #2d5016;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;">
-                        </div>
-                        <div>
-                            <label style="font-weight:700;font-size:14px;display:block;margin-bottom:4px;">Hasta:</label>
-                            <input type="date" id="gananciaHasta" value="${hoy}" onchange="actualizarGananciaPEPS()" style="padding:8px 12px;border:2px solid #2d5016;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;">
-                        </div>
-                        <button onclick="document.getElementById('gananciaDesde').value='${primerDiaMes}';document.getElementById('gananciaHasta').value='${ultimoDiaMes}';actualizarGananciaPEPS();" class="btn btn-secondary">Este mes</button>
-                        <button onclick="actualizarGananciaPEPS()" class="btn btn-primary">Calcular</button>
-                    </div>
-                    <div style="overflow-x:auto;">
-                        <table>
-                            <thead><tr><th>Producto</th><th>Unid. Vendidas</th><th style="color:#b3e5fc;">Precio Venta x Uni</th><th style="color:#ffe0b2;">Costo Compra x Uni</th><th style="color:#b9f6ca;">Total Venta</th><th style="color:#ffcdd2;">Costo Total (Compras)</th><th style="color:#FFD700;">Ganancia</th></tr></thead>
-                            <tbody id="gananciaBody"><tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">Selecciona un rango de fechas y presiona Calcular</td></tr></tbody>
-                        </table>
-                    </div>
-                    <p style="font-size:12px;color:#aaa;margin-top:10px;">⚠ El costo se calcula solo con los registros de <strong>Ing. Mercadería</strong> (método PEPS). Si un producto no tiene entradas registradas en ese módulo, el costo aparecerá en S/. 0.00 y la ganancia estará sobreestimada.</p>
-                </div>
-
                 <!-- SECCIÓN GANANCIA POR PEDIDO -->
                 <div class="card" style="margin-bottom:20px;border-left:6px solid #0d47a1;">
                     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
                         <div>
                             <h3 style="font-family:'Russo One',sans-serif;color:#0d47a1;font-size:20px;">📋 GANANCIA PEDIDO A PEDIDO</h3>
-                            <p style="color:#777;font-size:13px;margin-top:3px;">Precio de venta − precio de compra por cada pedido. Incluye créditos y mixtos.</p>
+                            <p style="color:#777;font-size:13px;margin-top:3px;">La ganancia toma primero el stock con fecha más antigua y, al acabarse, sigue con la siguiente fecha. Incluye créditos y mixtos.</p>
                         </div>
                         <div style="text-align:right;">
                             <div style="font-size:12px;color:#888;font-weight:700;">GANANCIA NETA (todos los pedidos)</div>
@@ -10040,7 +10380,6 @@
                 </div>
             `;
             document.getElementById('moduleContent').innerHTML = content;
-            actualizarGananciaPEPS();
             actualizarGananciaPorPedido();
             filtrarIngresosReporte();
         }
@@ -10253,15 +10592,16 @@
 
         function eliminarPedido(id) {
             if (!confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')) return;
-            // Eliminar pedido
-            let pedidos = Storage.getArray('pedidos').filter(p => p.id !== id);
-            Storage.set('pedidos', pedidos);
-            // Eliminar venta asociada
-            let ventas = Storage.getArray('ventas').filter(v => v.pedidoId !== id);
-            Storage.set('ventas', ventas);
-            // Eliminar crédito asociado si existe
-            let creditos = Storage.getArray('creditos').filter(c => c.pedidoId !== id);
-            Storage.set('creditos', creditos);
+            // Obtener venta y crédito asociados antes de borrar
+            const ventas = Storage.getArray('ventas');
+            const creditos = Storage.getArray('creditos');
+            const ventaAsoc = ventas.find(v => v.pedidoId === id);
+            const creditoAsoc = creditos.find(c => c.pedidoId === id);
+            // Eliminar pedido, venta y crédito usando deleteItem (borra en Firebase individualmente)
+            Storage.deleteItem('pedidos', id);
+            if (ventaAsoc) Storage.deleteItem('ventas', ventaAsoc.id);
+            if (creditoAsoc) Storage.deleteItem('creditos', creditoAsoc.id);
+            recalcularTodoElStock(true);
             showNotification('✅ Pedido eliminado', 'success');
             renderPedidos();
         }
@@ -10447,6 +10787,7 @@
                 p.trabajadorId = null; p.trabajadorNombre = ''; p.trabajadorCodigo = '';
             }
             Storage.set('pedidos', pedidos);
+            recalcularTodoElStock(true);
             // Actualizar venta
             const ventas = Storage.getArray('ventas');
             const vi = ventas.findIndex(v => v.pedidoId === id);
@@ -10591,6 +10932,7 @@
                     });
                     // ✅ FIX CAJA: no actualizar estado de caja desde Firebase al volver a la pestaña
                     // El estado abierta/cerrada es local — pisarlo desde la nube rompe el módulo
+                    Object.keys(Storage._deletedTombstones).forEach(k => Storage._purgeDeletedFromLocal(k));
                     updateDashboard();
                     refreshActiveModule();
                 }
@@ -10744,7 +11086,9 @@ window.resetSistemaTotal = async function(){
   if(!confirm("⚠️ Se eliminarán TODOS los datos. ¿Continuar?")) return;
 
   try {
-    const colecciones = ["ventas","stock","caja"];
+    const colecciones = ["ventas","stock","caja","pedidos","productos","clientes",
+                         "proveedores","trabajadores","gastos","ingresos","creditos",
+                         "ingresosCaja","fierros","cierresCaja"];
     let respaldoTotal = {};
 
     colecciones.forEach(col => {
@@ -10761,10 +11105,23 @@ window.resetSistemaTotal = async function(){
     });
     Storage.set('respaldos', respaldos);
 
-    // 🗑 eliminar datos
+    // ✅ FIX: Pausar listener Firebase ANTES de borrar
+    if(_fbReady && _db) _db.ref('costagas').off();
+
+    // 🗑 eliminar datos de localStorage
     colecciones.forEach(col => {
-      Storage.set(col, []);
+      localStorage.removeItem(col);
     });
+    Object.keys(localStorage).forEach(k => {
+      if(k.startsWith('caja_u')) localStorage.removeItem(k);
+    });
+
+    // 🗑 eliminar datos de Firebase
+    if(_fbReady && _db) {
+      try {
+        await Promise.all(colecciones.map(col => _db.ref(`costagas/${col}`).remove()));
+      } catch(e) {}
+    }
 
     window.auditLog("RESET TOTAL EJECUTADO");
     alert("Sistema reiniciado correctamente 🔥");
