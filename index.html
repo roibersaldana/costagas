@@ -1372,6 +1372,89 @@
         Storage._lastWrite = {}; // timestamp de última escritura local por clave
 
         // ==================== INICIALIZACIÓN Y LISTENERS FIREBASE ====================
+        function tieneDatosLocalesImportantes() {
+            try {
+                const usuarios = Storage.getArray('usuarios');
+                const trabajadores = Storage.getArray('trabajadores');
+                const pedidos = Storage.getArray('pedidos');
+                const ventas = Storage.getArray('ventas');
+                const compras = Storage.getArray('compras');
+                const clientes = Storage.getArray('clientes');
+                const productos = Storage.getArray('productos');
+
+                const hayUsuariosReales = usuarios.some(u =>
+                    u && (
+                        u.role !== 'admin' ||
+                        u.username !== 'admin' ||
+                        u.password !== 'admin123' ||
+                        u.mustChangePassword === false
+                    )
+                );
+
+                return hayUsuariosReales ||
+                    trabajadores.length > 0 ||
+                    pedidos.length > 0 ||
+                    ventas.length > 0 ||
+                    compras.length > 0 ||
+                    clientes.length > 0 ||
+                    productos.length > 0;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function esColeccionCritica(k) {
+            return ['usuarios', 'trabajadores'].includes(k);
+        }
+
+        function puedeSubirClaveVaciaANube(k, local) {
+            if (k === 'usuarios') {
+                const arr = Array.isArray(local) ? local : [];
+                return arr.some(u =>
+                    u && (
+                        u.role !== 'admin' ||
+                        u.username !== 'admin' ||
+                        u.password !== 'admin123' ||
+                        u.mustChangePassword === false
+                    )
+                );
+            }
+            if (k === 'trabajadores') {
+                const arr = Array.isArray(local) ? local : [];
+                return arr.length > 0;
+            }
+            return true;
+        }
+
+        async function cargarDatosDesdeNubeUnaVez() {
+            if (!_fbReady || !_db) return false;
+            const snap = await _db.ref('costagas').once('value');
+            const cloudData = snap.val();
+            if (!cloudData) return false;
+
+            function fbNodoAArray(val) {
+                if (!val) return null;
+                if (Array.isArray(val)) return val;
+                if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
+                return val;
+            }
+
+            DB_KEYS.forEach(k => {
+                if (cloudData[k] === undefined) return;
+                const val = fbNodoAArray(cloudData[k]);
+                localStorage.setItem(k, JSON.stringify(val));
+            });
+
+            Object.keys(cloudData).forEach(k => {
+                if (!k.startsWith('caja_u')) return;
+                const val = fbNodoAArray(cloudData[k]);
+                localStorage.setItem(k, JSON.stringify(val));
+            });
+
+            localStorage.setItem('_cloudDataLoaded', 'true');
+            return true;
+        }
+
         async function initFirebase(config) {
             try {
                 // Evitar doble inicialización
@@ -1400,6 +1483,7 @@
                     showSyncBadge(online ? 'online' : 'offline');
                     if (online) {
                         // Recién volvió el internet → subir cambios locales pendientes
+                        // pero nunca permitir que un dispositivo nuevo vacíe usuarios o trabajadores
                         sincronizarDatosLocales();
                     }
                 });
@@ -1468,27 +1552,50 @@
                     const cloudData = snap.val();
 
                     if (!cloudData) {
-                        // Nube vacía → subir todo lo local en segundo plano
+                        // ✅ Protección crítica:
+                        // si la nube está vacía, NO subir automáticamente usuarios/trabajadores
+                        // desde un dispositivo nuevo o con localStorage vacío.
+                        const hayDatosLocales = tieneDatosLocalesImportantes();
+
+                        if (!hayDatosLocales) {
+                            // Instalación nueva: crear base local mínima, pero NO empujar a la nube todavía.
+                            initializeData();
+                            showSyncBadge('online');
+                            return;
+                        }
+
+                        // Solo subir claves permitidas y nunca subir colecciones críticas vacías
                         const updates = {};
                         DB_KEYS.forEach(k => {
                             const local = Storage.get(k);
                             if (!local) return;
+
+                            if (esColeccionCritica(k) && !puedeSubirClaveVaciaANube(k, local)) {
+                                return;
+                            }
+
                             if (Array.isArray(local)) {
-                                local.forEach(item => { if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item; });
+                                local.forEach(item => {
+                                    if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
+                                });
                             } else {
                                 updates[`costagas/${k}`] = local;
                             }
                         });
+
                         Object.keys(localStorage).forEach(k => {
                             if (!k.startsWith('caja_u')) return;
                             const local = Storage.get(k);
                             if (!local) return;
                             if (Array.isArray(local)) {
-                                local.forEach(item => { if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item; });
+                                local.forEach(item => {
+                                    if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
+                                });
                             } else {
                                 updates[`costagas/${k}`] = local;
                             }
                         });
+
                         if (Object.keys(updates).length > 0) _db.ref().update(updates);
                     } else {
                         // Nube tiene datos → actualizar localStorage en segundo plano
@@ -1502,6 +1609,7 @@
                             const val = fbNodoAArray(cloudData[k]);
                             localStorage.setItem(k, JSON.stringify(val));
                         });
+                        localStorage.setItem('_cloudDataLoaded', 'true');
                         if (currentUser) { updateDashboard(); refreshActiveModule(); }
                     }
                     showSyncBadge('online');
@@ -1525,35 +1633,38 @@
             // Primero leer Firebase para saber qué fue eliminado por otros dispositivos
             _db.ref('costagas').once('value').then(snap => {
                 const cloudData = snap.val() || {};
+                const cloudIsEmpty = !snap.val();
                 const allKeys = [...DB_KEYS, ...Object.keys(localStorage).filter(k => k.startsWith('caja_u'))];
                 const updates = {};
+
                 allKeys.forEach(k => {
                     const local = Storage.get(k);
                     if (!local) return;
+
+                    // ✅ Protección crítica:
+                    // si la nube está vacía y esta colección crítica también está vacía o solo tiene admin,
+                    // NO subirla para no borrar usuarios/trabajadores reales desde otro dispositivo.
+                    if (cloudIsEmpty && esColeccionCritica(k) && !puedeSubirClaveVaciaANube(k, local)) {
+                        return;
+                    }
+
                     if (Array.isArray(local)) {
                         const cloudNodo = cloudData[k] || {};
-                        // Solo subir items que YA EXISTEN en Firebase o son nuevos (creados offline)
-                        // NO subir items que Firebase ya eliminó (no están en cloudNodo y tampoco tienen _creadoOffline)
                         const idsEnNube = new Set(Object.keys(cloudNodo).map(String));
+
                         local.forEach(item => {
                             if (item && item.id != null) {
                                 const idStr = String(item.id);
-                                // Subir si: existe en nube, o fue marcado como creado offline
-                                if (idsEnNube.has(idStr) || item._creadoOffline) {
+                                if (idsEnNube.has(idStr) || item._creadoOffline || idsEnNube.size === 0) {
                                     updates[`costagas/${k}/${item.id}`] = item;
                                 }
                             }
                         });
-                        // Si la nube está vacía en esta clave (nunca hubo datos), subir todo
-                        if (idsEnNube.size === 0) {
-                            local.forEach(item => {
-                                if (item && item.id != null) updates[`costagas/${k}/${item.id}`] = item;
-                            });
-                        }
                     } else {
                         updates[`costagas/${k}`] = local;
                     }
                 });
+
                 if (Object.keys(updates).length > 0) {
                     _db.ref().update(updates)
                         .then(() => showSyncBadge('online'))
@@ -1745,12 +1856,11 @@
         }
 
         (async function autoConnectFirebase() {
-            // Si hay config embebida, conectar Y marcar vinculado automáticamente
-            // Esto evita la pantalla de vinculación en dispositivos nuevos
+            // ✅ Conectar automáticamente, pero NO marcar como vinculado solo por tener config.
+            // La autorización del dispositivo debe existir en Firebase o hacerse con el código.
             if (FIREBASE_EMBEDDED && FIREBASE_EMBEDDED.apiKey) {
                 try {
                     await initFirebase(FIREBASE_EMBEDDED);
-                    localStorage.setItem('_deviceVinculado', 'true');
                     localStorage.setItem('_firebaseConfig', JSON.stringify(FIREBASE_EMBEDDED));
                 } catch(e) {}
             } else {
@@ -1765,6 +1875,14 @@
         // ==================== DATOS INICIALES ====================
         function initializeData() {
             const yaInicializado = localStorage.getItem('_sistemaInicializado') === 'true';
+            const cloudLoaded = localStorage.getItem('_cloudDataLoaded') === 'true';
+            const tieneConfigFirebase = !!((typeof FIREBASE_EMBEDDED !== 'undefined' && FIREBASE_EMBEDDED && FIREBASE_EMBEDDED.apiKey) || localStorage.getItem('_firebaseConfig'));
+
+            // ✅ Si este dispositivo puede conectarse a Firebase pero todavía no cargó la nube,
+            // NO crear usuarios/trabajadores locales por defecto.
+            if (tieneConfigFirebase && !cloudLoaded && !_fbReady) {
+                return;
+            }
 
             // Solo el admin — nunca crear vendedor por defecto
             if (!Storage.get('usuarios')) {
@@ -1779,8 +1897,8 @@
                 }
             }
 
-            // Datos de ejemplo SOLO la primera vez
-            if (!yaInicializado) {
+            // Datos de ejemplo SOLO la primera vez y solo cuando no vinieron desde la nube
+            if (!yaInicializado && !cloudLoaded) {
                 localStorage.setItem('_sistemaInicializado', 'true');
                 if (_fbReady && _db) {
                     _db.ref('costagas/_sistemaInicializado').set(true).catch(() => {});
@@ -1812,7 +1930,7 @@
              'productos', 'clientes', 'proveedores', 'trabajadores', 'fierros'].forEach(key => {
                 if (localStorage.getItem(key) === null) Storage.set(key, []);
             });
-            
+
             // Caja
             if (!Storage.get(getCajaKey())) {
                 Storage.set(getCajaKey(), { estado: 'cerrada', montoInicial: 0, montoActual: 0 });
@@ -5111,7 +5229,15 @@
                 document.getElementById('vinculandoMsg').style.display = 'block';
                 const ok = await initFirebase(config);
                 if (ok) {
-                    // ✅ Marcar dispositivo como vinculado (no pedirá el código otra vez)
+                    if (_fbReady && _db) {
+                        const deviceId = getCurrentDeviceId();
+                        await _db.ref('costagas/dispositivosVinculados/' + deviceId).set({
+                            vinculado: true,
+                            fecha: new Date().toISOString()
+                        });
+                        await cargarDatosDesdeNubeUnaVez();
+                    }
+
                     localStorage.setItem('_deviceVinculado', 'true');
                     showNotification('✅ ¡Vinculado! Ahora compartes la misma base de datos.', 'success');
                     renderRespaldos();
@@ -5151,14 +5277,15 @@
                 if (!ok) throw new Error('No se pudo conectar');
 
                 // ✅ Marcar dispositivo como vinculado permanentemente (localStorage + Firebase)
-                localStorage.setItem('_deviceVinculado', 'true');
                 if (_fbReady && _db) {
                     const deviceId = getCurrentDeviceId();
-                    _db.ref('costagas/dispositivosVinculados/' + deviceId).set({
+                    await _db.ref('costagas/dispositivosVinculados/' + deviceId).set({
                         vinculado: true,
                         fecha: new Date().toISOString()
-                    }).catch(() => {});
+                    });
+                    await cargarDatosDesdeNubeUnaVez();
                 }
+                localStorage.setItem('_deviceVinculado', 'true');
 
                 // Ir al login (ya vinculado, ahora ingresan con usuario y contraseña)
                 document.getElementById('vincularContainer').style.display = 'none';
@@ -10602,7 +10729,18 @@
 
         // ==================== INICIALIZACIÓN ====================
         document.addEventListener('DOMContentLoaded', function() {
-            initializeData();
+            const tieneConfigFirebase = !!((typeof FIREBASE_EMBEDDED !== 'undefined' && FIREBASE_EMBEDDED && FIREBASE_EMBEDDED.apiKey) || localStorage.getItem('_firebaseConfig'));
+            const hayDatosLocalesPrevios = !!(
+                localStorage.getItem('usuarios') ||
+                localStorage.getItem('trabajadores') ||
+                localStorage.getItem('_sistemaInicializado')
+            );
+
+            // ✅ Solo inicializar de inmediato si ya es un dispositivo antiguo con datos locales,
+            // o si no existe ninguna config de Firebase.
+            if (!tieneConfigFirebase || hayDatosLocalesPrevios) {
+                initializeData();
+            }
             registrarDispositivoActual(true);
             revisarControlRemotoDispositivo();
             checkSession();
