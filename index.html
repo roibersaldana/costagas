@@ -1950,11 +1950,11 @@
             return 'caja_u' + currentUser.id;
         }
 
-        // Filtrar pedidos según rol: admin ve todos, vendedor ve solo los suyos
+        // Filtrar pedidos según rol: admin y recepcionista ven todos; vendedor ve solo los suyos
         function getPedidosPropios(pedidos) {
             // Si admin está viendo datos de un vendedor específico
             const u = _adminViewingUser || currentUser;
-            if (!u || (u.role === 'admin' && !_adminViewingUser)) return pedidos;
+            if (!u || ((u.role === 'admin' || u.role === 'recepcionista') && !_adminViewingUser)) return pedidos;
             return pedidos.filter(p =>
                 p.trabajadorId === u.trabajadorId ||
                 p.usuarioId === u.id ||
@@ -1981,10 +1981,13 @@
                 pedidoId: pedido.id,
                 paraUsuarioId: pedido.vendedorAsignadoId,
                 mensaje: 'Nuevo pedido telefónico pendiente',
+                detalle: `${pedido.clienteNombre || 'Cliente'} • ${(pedido.tipoValvula || 'normal').toUpperCase()} • ${formatCurrency(pedido.total || 0)}`,
                 leida: false,
+                estado: 'pendiente',
                 fecha: getCurrentDateTime()
             });
             Storage.set('notificacionesPedidos', notificaciones);
+            actualizarAlertaSonoraPedidos();
         }
 
         function contarNotificacionesPendientes() {
@@ -2003,6 +2006,80 @@
                 }
             });
             if (cambio) Storage.set('notificacionesPedidos', notificaciones);
+            actualizarAlertaSonoraPedidos();
+        }
+
+        function actualizarEstadoNotificacionPedido(pedidoId, nuevoEstado) {
+            const notificaciones = Storage.getArray('notificacionesPedidos');
+            let cambio = false;
+            notificaciones.forEach(n => {
+                if (n.pedidoId === pedidoId) {
+                    n.estado = nuevoEstado;
+                    if (nuevoEstado !== 'pendiente') n.leida = true;
+                    cambio = true;
+                }
+            });
+            if (cambio) Storage.set('notificacionesPedidos', notificaciones);
+            actualizarAlertaSonoraPedidos();
+        }
+
+        let _pedidoToneTimer = null;
+        let _pedidoAudioCtx = null;
+
+        function contarAlertasSonorasPendientes() {
+            if (!currentUser || currentUser.role !== 'vendedor') return 0;
+            const notificaciones = Storage.getArray('notificacionesPedidos');
+            return notificaciones.filter(n => n.paraUsuarioId === currentUser.id && n.estado === 'pendiente').length;
+        }
+
+        function reproducirTonoPedido() {
+            try {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                if (!AudioCtx) return;
+                if (!_pedidoAudioCtx) _pedidoAudioCtx = new AudioCtx();
+                if (_pedidoAudioCtx.state === 'suspended') {
+                    _pedidoAudioCtx.resume().catch(() => {});
+                }
+                const now = _pedidoAudioCtx.currentTime;
+                [0, 0.32].forEach(offset => {
+                    const osc = _pedidoAudioCtx.createOscillator();
+                    const gain = _pedidoAudioCtx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, now + offset);
+                    gain.gain.setValueAtTime(0.0001, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
+                    osc.connect(gain);
+                    gain.connect(_pedidoAudioCtx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.24);
+                });
+            } catch (e) {}
+        }
+
+        function detenerAlertaSonoraPedidos() {
+            if (_pedidoToneTimer) {
+                clearInterval(_pedidoToneTimer);
+                _pedidoToneTimer = null;
+            }
+        }
+
+        function actualizarAlertaSonoraPedidos() {
+            const pendientes = contarAlertasSonorasPendientes();
+            if (pendientes > 0) {
+                reproducirTonoPedido();
+                if (!_pedidoToneTimer) {
+                    _pedidoToneTimer = setInterval(() => {
+                        if (contarAlertasSonorasPendientes() > 0) {
+                            reproducirTonoPedido();
+                        } else {
+                            detenerAlertaSonoraPedidos();
+                        }
+                    }, 3500);
+                }
+            } else {
+                detenerAlertaSonoraPedidos();
+            }
         }
 
         function obtenerTrabajadorDeUsuario(usuarioId) {
@@ -2030,6 +2107,7 @@
             pedido.fechaAceptacion = getCurrentDateTime();
             pedido.aceptadoPor = currentUser.nombre;
             marcarNotificacionLeidaPorPedido(id);
+            actualizarEstadoNotificacionPedido(id, 'aceptado');
             Storage.set('pedidos', pedidos);
             showNotification('Pedido aceptado ✅', 'success');
             renderPedidos();
@@ -2046,6 +2124,7 @@
             pedido.estado = 'entregado';
             pedido.fechaEntrega = getCurrentDateTime();
             pedido.entregadoPor = currentUser.nombre;
+            actualizarEstadoNotificacionPedido(id, 'entregado');
             Storage.set('pedidos', pedidos);
             showNotification('Pedido marcado como entregado ✅', 'success');
             renderPedidos();
@@ -2172,6 +2251,7 @@
                                 registrarDispositivoActual(true);
                                 updateDashboard();
                                 applyRoleRestrictions();
+                                actualizarAlertaSonoraPedidos();
                                 showNotification('✅ ¡Bienvenido ' + u.nombre + '!', 'success');
                                 setTimeout(() => abrirCajaSiCerrada(), 400);
                             }
@@ -2268,6 +2348,7 @@
                 
                 updateDashboard();
                 applyRoleRestrictions();
+                actualizarAlertaSonoraPedidos();
                 showNotification('¡Bienvenido ' + user.nombre + '!', 'success');
                 setTimeout(() => abrirCajaSiCerrada(), 400);
             } else {
@@ -2281,6 +2362,7 @@
             if (confirm('¿Está seguro de cerrar sesión?')) {
                 currentUser = null;
                 sessionStorage.removeItem('currentUser');
+                detenerAlertaSonoraPedidos();
                 
                 document.getElementById('appContainer').classList.remove('active');
                 document.getElementById('loginContainer').classList.add('active');
@@ -2855,11 +2937,15 @@
                 document.getElementById('currentUser').textContent = currentUser.nombre;
                 updateDashboard();
                 applyRoleRestrictions();
+                actualizarAlertaSonoraPedidos();
                 setTimeout(() => abrirCajaSiCerrada(), 400);
             } else {
                 // Vinculado pero sin sesión: mostrar login
                 document.getElementById('loginContainer').classList.add('active');
             }
+            setInterval(() => {
+                try { actualizarAlertaSonoraPedidos(); } catch(e) {}
+            }, 3000);
         }
 
         // ==================== SEGURIDAD: HASH SHA-256 ====================
@@ -2972,10 +3058,10 @@
             if (currentUser.modulosPermitidos && currentUser.modulosPermitidos.length > 0) {
                 return currentUser.modulosPermitidos.includes(module);
             }
-            // Por defecto vendedor solo ve estos módulos básicos
             const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
             const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
-            return defaultVendedor.includes(module);
+            const defaults = currentUser.role === 'recepcionista' ? defaultRecepcionista : defaultVendedor;
+            return defaults.includes(module);
         }
 
         function applyRoleRestrictions() {
@@ -2988,6 +3074,10 @@
                     badge.style.display = 'inline-block';
                     badge.style.background = '#b71c1c';
                     badge.textContent = '👑 ADMIN';
+                } else if (currentUser.role === 'recepcionista') {
+                    badge.style.display = 'inline-block';
+                    badge.style.background = '#7b1fa2';
+                    badge.textContent = '☎️ RECEPCIONISTA';
                 } else {
                     badge.style.display = 'inline-block';
                     badge.style.background = '#1565c0';
@@ -2997,7 +3087,7 @@
             // Etiqueta de caja
             const cajaLabel = document.getElementById('cajaOwnerLabel');
             if (cajaLabel) {
-                cajaLabel.textContent = currentUser.role === 'admin' ? '(Global)' : '(Mi caja)';
+                cajaLabel.textContent = (currentUser.role === 'admin' || currentUser.role === 'recepcionista') ? '(Global)' : '(Mi caja)';
             }
         }
 
@@ -4578,7 +4668,7 @@
                                 </div>
                                 <div class="form-field">
                                     <label>Rol:</label>
-                                    <select id="usuarioRole" required onchange="toggleCheckboxModulos()">
+                                    <select id="usuarioRole" required onchange="toggleCheckboxModulos(true)">
                                         <option value="vendedor">Vendedor</option>
                                         <option value="recepcionista">Recepcionista</option>
                                         <option value="admin">Administrador</option>
@@ -4633,10 +4723,21 @@
             document.getElementById('moduleContent').innerHTML = content;
         }
 
-        function toggleCheckboxModulos() {
+        function toggleCheckboxModulos(aplicarDefaults = false) {
             const rol = document.getElementById('usuarioRole')?.value;
             const sec = document.getElementById('seccionModulos');
             if (sec) sec.style.display = rol === 'admin' ? 'none' : 'block';
+
+            if (!aplicarDefaults || rol === 'admin') return;
+
+            const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaults = rol === 'recepcionista' ? defaultRecepcionista : defaultVendedor;
+
+            TODOS_MODULOS.forEach(m => {
+                const cb = document.getElementById('mod_' + m.id);
+                if (cb) cb.checked = defaults.includes(m.id);
+            });
         }
 
         function marcarTodosModulos(marcar) {
@@ -4662,7 +4763,7 @@
                 const cb = document.getElementById('mod_' + m.id);
                 if (cb) cb.checked = (document.getElementById('usuarioRole').value === 'recepcionista' ? defaultRecepcionista : defaultVendedor).includes(m.id);
             });
-            toggleCheckboxModulos();
+            toggleCheckboxModulos(true);
             document.getElementById('modalUsuario').classList.add('active');
         }
 
@@ -4684,7 +4785,7 @@
                 const cb = document.getElementById('mod_' + m.id);
                 if (cb) cb.checked = permitidos.includes(m.id);
             });
-            toggleCheckboxModulos();
+            toggleCheckboxModulos(true);
             document.getElementById('modalUsuario').classList.add('active');
         }
 
@@ -6887,7 +6988,7 @@
 
         function renderGastos() {
             const todosGastos = Storage.getArray('gastos');
-            const esAdmin = currentUser?.role === 'admin';
+            const esAdmin = currentUser?.role === 'admin' || currentUser?.role === 'recepcionista';
             // Vendedor solo ve sus propios gastos
             const gastos = esAdmin ? todosGastos : todosGastos.filter(g =>
                 (g.usuario||'').toLowerCase() === (currentUser?.nombre||'').toLowerCase()
@@ -7732,7 +7833,7 @@
 
         function renderCreditos() {
             const todosCreditos = Storage.getArray('creditos');
-            const esAdmin = currentUser?.role === 'admin';
+            const esAdmin = currentUser?.role === 'admin' || currentUser?.role === 'recepcionista';
             // Vendedor solo ve créditos de sus propios pedidos
             const misPedidosIds = new Set(
                 getPedidosPropios(Storage.getArray('pedidos')).map(p => p.id)
@@ -10523,11 +10624,12 @@
             `;
             document.getElementById('moduleContent').innerHTML = content;
             filtrarPedidosTabla();
+            actualizarAlertaSonoraPedidos();
         }
 
         function generarFilasPedidos(pedidos) {
             if (!pedidos.length) return '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">Sin pedidos</td></tr>';
-            const esAdmin = currentUser?.role === 'admin';
+            const esAdmin = currentUser?.role === 'admin' || currentUser?.role === 'recepcionista';
             return pedidos.slice().reverse().map(p => {
                 const puedeAceptar = currentUser?.id && p.vendedorAsignadoId === currentUser.id && p.estado === 'pendiente';
                 const puedeEntregar = currentUser?.id && p.vendedorAsignadoId === currentUser.id && (p.estado === 'aceptado');
@@ -10910,7 +11012,7 @@
             const statVLabel = document.getElementById('statVentasLabel');
             const statPLabel = document.getElementById('statPedidosLabel');
             if (statVLabel) statVLabel.textContent = esAdmin ? 'Ventas Hoy (Global)' : 'Mis Ventas Hoy';
-            if (statPLabel) statPLabel.textContent = esAdmin ? 'Pedidos Hoy (Global)' : 'Mis Pedidos Hoy';
+            if (statPLabel) statPLabel.textContent = (esAdmin || currentUser?.role === 'recepcionista') ? 'Pedidos Hoy (Global)' : 'Mis Pedidos Hoy';
 
             // Actualizar estado de caja
             const cajaKey = (_adminViewingUser && currentUser?.role === 'admin')
