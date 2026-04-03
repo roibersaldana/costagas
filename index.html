@@ -1051,9 +1051,10 @@
                     </div>
                     <div>Fecha: <strong id="currentDate"></strong></div>
                     <div>Caja: <strong id="cashStatus" style="color: #FFD700;">CERRADA</strong> <span id="cajaOwnerLabel" style="font-size:11px;color:rgba(255,255,255,0.6);"></span></div>
-                    <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">
+                    <div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                         <span id="syncBadge" style="display:none;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:white;background:#4caf50;">☁️ Sincronizado</span>
                         <span id="localBadge" style="padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;color:white;background:#ff9800;">💾 Solo local</span>
+                        <button id="btnMensajesHeader" onclick="showModule('mensajes')" style="display:none;background:#6a1b9a;color:white;border:none;border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;cursor:pointer;">💬 Mensajes <span id="contadorMensajesHeader" style="display:none;background:#ffd54f;color:#4a148c;border-radius:999px;padding:1px 7px;margin-left:4px;">0</span></button>
                     </div>
                     <button onclick="logout()" class="btn-logout">CERRAR SESIÓN</button>
                 </div>
@@ -1978,6 +1979,7 @@
             });
             Storage.set('notificacionesPedidos', notificaciones);
             actualizarAlertaSonoraPedidos();
+            actualizarBotonMensajesHeader();
         }
 
         function contarNotificacionesPendientes() {
@@ -1997,6 +1999,7 @@
             });
             if (cambio) Storage.set('notificacionesPedidos', notificaciones);
             actualizarAlertaSonoraPedidos();
+            actualizarBotonMensajesHeader();
         }
 
         function actualizarEstadoNotificacionPedido(pedidoId, nuevoEstado) {
@@ -2011,6 +2014,7 @@
             });
             if (cambio) Storage.set('notificacionesPedidos', notificaciones);
             actualizarAlertaSonoraPedidos();
+            actualizarBotonMensajesHeader();
         }
 
         let _pedidoToneTimer = null;
@@ -2031,18 +2035,18 @@
                     _pedidoAudioCtx.resume().catch(() => {});
                 }
                 const now = _pedidoAudioCtx.currentTime;
-                [0, 0.32].forEach(offset => {
+                [0, 0.16].forEach((offset, i) => {
                     const osc = _pedidoAudioCtx.createOscillator();
                     const gain = _pedidoAudioCtx.createGain();
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(880, now + offset);
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(i === 0 ? 1250 : 980, now + offset);
                     gain.gain.setValueAtTime(0.0001, now + offset);
-                    gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.02);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
+                    gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.10);
                     osc.connect(gain);
                     gain.connect(_pedidoAudioCtx.destination);
                     osc.start(now + offset);
-                    osc.stop(now + offset + 0.24);
+                    osc.stop(now + offset + 0.11);
                 });
             } catch (e) {}
         }
@@ -2065,7 +2069,7 @@
                         } else {
                             detenerAlertaSonoraPedidos();
                         }
-                    }, 3500);
+                    }, 2400);
                 }
             } else {
                 detenerAlertaSonoraPedidos();
@@ -2099,8 +2103,14 @@
             marcarNotificacionLeidaPorPedido(id);
             actualizarEstadoNotificacionPedido(id, 'aceptado');
             Storage.set('pedidos', pedidos);
-            showNotification('Pedido aceptado ✅', 'success');
-            renderPedidos();
+            agregarMensajePedido(id, 'Pedido aceptado y cargado en Nuevo Pedido ✅', 'sistema');
+            _pedidoRecepcionistaActivoId = id;
+            showNotification('Pedido aceptado. Abriendo Nuevo Pedido... ✅', 'success');
+            showModule('nuevoPedido');
+            setTimeout(() => {
+                const nombre = document.getElementById('clienteNombre');
+                if (nombre) nombre.focus();
+            }, 80);
         }
 
         function marcarPedidoEntregado(id) {
@@ -2116,8 +2126,9 @@
             pedido.entregadoPor = currentUser.nombre;
             actualizarEstadoNotificacionPedido(id, 'entregado');
             Storage.set('pedidos', pedidos);
+            agregarMensajePedido(id, 'Pedido marcado como entregado ✅', 'sistema');
             showNotification('Pedido marcado como entregado ✅', 'success');
-            renderPedidos();
+            if (_activeModule === 'mensajes') renderMensajes();
         }
 
         function procesarPedidoRecepcionista() {
@@ -2170,6 +2181,7 @@
             const pedidos = Storage.getArray('pedidos');
             pedidos.push(pedido);
             Storage.set('pedidos', pedidos);
+            asegurarConversacionPedido(pedido);
             crearNotificacionPedido(pedido);
             showNotification('Pedido enviado al vendedor ✅', 'success');
             limpiarPedido();
@@ -3025,6 +3037,7 @@
         // Todos los módulos que existen y su etiqueta visible
         const TODOS_MODULOS = [
             { id: 'nuevoPedido',  label: '🛒 Nuevo Pedido' },
+            { id: 'mensajes',     label: '💬 Mensajes' },
             { id: 'pedidos',      label: '📋 Pedidos' },
             { id: 'productos',    label: '📦 Productos' },
             { id: 'clientes',     label: '👤 Clientes' },
@@ -3048,8 +3061,8 @@
             if (currentUser.modulosPermitidos && currentUser.modulosPermitidos.length > 0) {
                 return currentUser.modulosPermitidos.includes(module);
             }
-            const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
-            const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaultVendedor = ['nuevoPedido','mensajes','pedidos','clientes','creditos'];
+            const defaultRecepcionista = ['nuevoPedido','mensajes','pedidos','clientes','creditos'];
             const defaults = currentUser.role === 'recepcionista' ? defaultRecepcionista : defaultVendedor;
             return defaults.includes(module);
         }
@@ -3079,6 +3092,7 @@
             if (cajaLabel) {
                 cajaLabel.textContent = (currentUser.role === 'admin' || currentUser.role === 'recepcionista') ? '(Global)' : '(Mi caja)';
             }
+            actualizarBotonMensajesHeader();
         }
 
         // Genera el menú dinámicamente según el rol
@@ -3087,6 +3101,7 @@
             if (!grid) return;
             const etiquetas = {
                 nuevoPedido:  '🛒 NUEVO PEDIDO',
+                mensajes:     '💬 MENSAJES',
                 pedidos:      '📋 PEDIDOS',
                 productos:    '📦 PRODUCTOS',
                 clientes:     '👤 CLIENTES',
@@ -3238,6 +3253,9 @@
                 case 'nuevoPedido':
                     renderNuevoPedido();
                     break;
+                case 'mensajes':
+                    renderMensajes();
+                    break;
                 case 'pedidos':
                     renderPedidos();
                     break;
@@ -3321,6 +3339,7 @@
 
         // ==================== MÓDULO: NUEVO PEDIDO ====================
         let carritoActual = [];
+        let _pedidoRecepcionistaActivoId = null;
         let pagosActuales = {
             efectivo: 0,
             yape: 0,
@@ -3330,20 +3349,106 @@
             cantidadValesFISE: 0
         };
 
+
+        function getPedidoRecepcionistaActivo() {
+            if (!_pedidoRecepcionistaActivoId) return null;
+            const pedidos = Storage.getArray('pedidos');
+            return pedidos.find(p => p.id === _pedidoRecepcionistaActivoId) || null;
+        }
+
+        function irAPedidoRecepcionista(id) {
+            const pedidos = Storage.getArray('pedidos');
+            const pedido = pedidos.find(p => p.id === id);
+            if (!pedido) {
+                showNotification('Pedido no encontrado', 'error');
+                return;
+            }
+            if (currentUser?.role !== 'admin' && pedido.vendedorAsignadoId !== currentUser?.id) {
+                showNotification('Este pedido no te corresponde', 'error');
+                return;
+            }
+            _pedidoRecepcionistaActivoId = id;
+            showModule('nuevoPedido');
+            setTimeout(() => {
+                const nombre = document.getElementById('clienteNombre');
+                if (nombre) nombre.focus();
+            }, 60);
+        }
+
+        function aplicarPedidoRecepcionistaEnFormulario(pedido) {
+            if (!pedido) return;
+            const nombre = document.getElementById('clienteNombre');
+            const telefono = document.getElementById('clienteTelefono');
+            const direccion = document.getElementById('clienteDireccion');
+            const valvula = document.getElementById('pedidoTipoValvula');
+            if (nombre) nombre.value = pedido.clienteNombre || '';
+            if (telefono) telefono.value = pedido.clienteTelefono || '';
+            if (direccion) direccion.value = pedido.clienteDireccion || '';
+            if (valvula && pedido.tipoValvula) valvula.value = pedido.tipoValvula;
+            clienteSeleccionado = null;
+            carritoActual = (pedido.items || []).map(i => ({
+                id: i.id,
+                nombre: i.nombre,
+                precio: parseFloat(i.precio) || 0,
+                precioOriginal: parseFloat(i.precioOriginal ?? i.precio) || 0,
+                cantidad: parseInt(i.cantidad) || 1
+            }));
+            actualizarCarrito();
+            actualizarPrecioSugeridoCliente();
+        }
+
+        function finalizarPedidoDesdeRecepcionista(baseData) {
+            const pedidoId = _pedidoRecepcionistaActivoId;
+            if (!pedidoId) return null;
+            const pedidos = Storage.getArray('pedidos');
+            const idx = pedidos.findIndex(p => p.id === pedidoId);
+            if (idx === -1) return null;
+            const original = pedidos[idx];
+            const actualizado = {
+                ...original,
+                ...baseData,
+                id: original.id,
+                clienteId: baseData.clienteId || original.clienteId,
+                clienteNombre: baseData.clienteNombre || original.clienteNombre,
+                clienteTelefono: document.getElementById('clienteTelefono')?.value?.trim() || original.clienteTelefono || '',
+                clienteDireccion: document.getElementById('clienteDireccion')?.value?.trim() || original.clienteDireccion || '',
+                items: [...carritoActual],
+                total: baseData.total,
+                vendedorAsignadoId: original.vendedorAsignadoId,
+                vendedorAsignadoNombre: original.vendedorAsignadoNombre,
+                creadoPorId: original.creadoPorId,
+                creadoPorRole: original.creadoPorRole,
+                fechaRecepcionista: original.fecha,
+                fechaProcesadoVendedor: getCurrentDateTime(),
+                atendidoDesdePedidoPendiente: true
+            };
+            pedidos[idx] = actualizado;
+            Storage.set('pedidos', pedidos);
+            actualizarEstadoNotificacionPedido(original.id, actualizado.estado || actualizado.tipoPago || 'completado');
+            marcarNotificacionLeidaPorPedido(original.id);
+            agregarMensajePedido(original.id, 'Pedido procesado desde Nuevo Pedido ✅', 'sistema');
+            _pedidoRecepcionistaActivoId = null;
+            return actualizado;
+        }
+
         function renderNuevoPedido() {
             const productos = Storage.getArray('productos');
             const clientes = Storage.getArray('clientes');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const esRecepcionista = currentUser?.role === 'recepcionista';
+            const pedidoActivoRecepcionista = !esRecepcionista ? getPedidoRecepcionistaActivo() : null;
             const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             
             const content = `
                 <div class="module-header">
-                    <h2>NUEVO PEDIDO</h2>
+                    <h2>${pedidoActivoRecepcionista ? 'NUEVO PEDIDO • PEDIDO RECIBIDO' : 'NUEVO PEDIDO'}</h2>
                     <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
                 </div>
                 
                 <div class="card">
+                    ${pedidoActivoRecepcionista ? `
+                    <div style="background:#f3e5f5;border:2px solid #ba68c8;border-radius:12px;padding:12px 16px;margin-bottom:16px;color:#6a1b9a;font-weight:700;">📞 Pedido enviado por recepcionista para <strong>${pedidoActivoRecepcionista.vendedorAsignadoNombre||'vendedor'}</strong>. Carga nombre, dirección, teléfono y productos para procesarlo aquí.</div>
+                    ` : ''}
                     <div class="form-row">
                         <div class="form-field">
                             <label>Cliente:</label>
@@ -3392,7 +3497,7 @@
                         `}
                     </div>
 
-                    <!-- ══ CILINDROS PRESTADOS ══ -->
+                    ${esRecepcionista ? '' : `<!-- ══ CILINDROS PRESTADOS ══ -->
                     <div style="background:linear-gradient(135deg,#e3f2fd,#fff8e1);border-radius:14px;padding:16px 18px;margin-top:16px;border:2px solid #90caf9;">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                             <span style="font-size:20px;">⛽</span>
@@ -3449,7 +3554,7 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </div>`}
                     
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 30px;" class="pos-main-grid">
                         <div>
@@ -3481,7 +3586,7 @@
                             </div>
                             
                             <button onclick="${esRecepcionista ? 'procesarPedidoRecepcionista()' : 'mostrarPagos()'}" class="btn btn-primary w-full" style="margin-top: 20px; padding: 16px; font-size: 20px;">
-                                ${esRecepcionista ? 'ENVIAR PEDIDO AL VENDEDOR' : 'PROCESAR PEDIDO'}
+                                ${esRecepcionista ? 'ENVIAR PEDIDO AL VENDEDOR' : (pedidoActivoRecepcionista ? 'PROCESAR PEDIDO RECIBIDO' : 'PROCESAR PEDIDO')}
                             </button>
                         </div>
                     </div>
@@ -3686,6 +3791,10 @@
             
             document.getElementById('moduleContent').innerHTML = content;
             autoSelectTrabajador();
+            if (pedidoActivoRecepcionista) {
+                aplicarPedidoRecepcionistaEnFormulario(pedidoActivoRecepcionista);
+                seleccionarCliente();
+            }
         }
 
         // Auto-selecciona el trabajador vinculado al usuario actual
@@ -4099,17 +4208,21 @@
             // Si hay vuelto significa que se pagó de más → el pedido está completamente cobrado
             const tipoPagoReal = (vuelto > 0.005 || credito === 0) ? 'completo' : pagado === 0 ? 'credito' : 'mixto';
 
-            const pedidos = Storage.getArray('pedidos');
-            const nuevoPedido = {
-                id: generateId(), clienteId, clienteNombre: nombreCliente,
+            let nuevoPedido = null;
+            const basePedido = {
+                clienteId, clienteNombre: nombreCliente,
                 trabajadorId: trabajador.id, trabajadorCodigo: trabajador.codigo, trabajadorNombre: trabajador.nombre,
-                items: [...carritoActual], total, pagos: pagosMixto,
-                creditoParcial: credito, tipoPago: tipoPagoReal,
-                fecha: getCurrentDateTime(), estado: tipoPagoReal,
-                usuario: currentUser.nombre, usuarioId: currentUser.id
+                total, pagos: pagosMixto, creditoParcial: credito, tipoPago: tipoPagoReal,
+                fecha: getCurrentDateTime(), estado: tipoPagoReal, usuario: currentUser.nombre, usuarioId: currentUser.id
             };
-            pedidos.push(nuevoPedido);
-            Storage.set('pedidos', pedidos);
+            if (_pedidoRecepcionistaActivoId) {
+                nuevoPedido = finalizarPedidoDesdeRecepcionista(basePedido);
+            } else {
+                const pedidos = Storage.getArray('pedidos');
+                nuevoPedido = { id: generateId(), items: [...carritoActual], ...basePedido };
+                pedidos.push(nuevoPedido);
+                Storage.set('pedidos', pedidos);
+            }
             descontarStock();
 
             // ✅ Sumar vacíos al stock: venta suma casco, préstamo no
@@ -4259,15 +4372,13 @@
             }
             let clienteId = guardarObtenerCliente(nombreCliente);
             
-            const pedidos = Storage.getArray('pedidos');
-            const nuevoPedido = {
-                id: generateId(),
+            let nuevoPedido = null;
+            const basePedido = {
                 clienteId,
                 clienteNombre: nombreCliente,
                 trabajadorId: trabajador.id,
                 trabajadorCodigo: trabajador.codigo,
                 trabajadorNombre: trabajador.nombre,
-                items: [...carritoActual],
                 total,
                 pagos: {...pagosActuales},
                 tipoPago: 'normal',
@@ -4276,9 +4387,14 @@
                 usuario: currentUser.nombre,
                 usuarioId: currentUser.id
             };
-            
-            pedidos.push(nuevoPedido);
-            Storage.set('pedidos', pedidos);
+            if (_pedidoRecepcionistaActivoId) {
+                nuevoPedido = finalizarPedidoDesdeRecepcionista(basePedido);
+            } else {
+                const pedidos = Storage.getArray('pedidos');
+                nuevoPedido = { id: generateId(), items: [...carritoActual], ...basePedido };
+                pedidos.push(nuevoPedido);
+                Storage.set('pedidos', pedidos);
+            }
             descontarStock();
 
             // ✅ Leer cilindros prestados del formulario
@@ -4343,15 +4459,13 @@
             let clienteId = guardarObtenerCliente(nombreCliente);
 
             // Guardar pedido
-            const pedidos = Storage.getArray('pedidos');
-            const nuevoPedido = {
-                id: generateId(),
+            let nuevoPedido = null;
+            const basePedido = {
                 clienteId,
                 clienteNombre: nombreCliente,
                 trabajadorId: trabajador.id,
                 trabajadorCodigo: trabajador.codigo,
                 trabajadorNombre: trabajador.nombre,
-                items: [...carritoActual],
                 total,
                 pagos: { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0 },
                 tipoPago: 'credito',
@@ -4359,8 +4473,14 @@
                 estado: 'credito',
                 usuario: currentUser.nombre
             };
-            pedidos.push(nuevoPedido);
-            Storage.set('pedidos', pedidos);
+            if (_pedidoRecepcionistaActivoId) {
+                nuevoPedido = finalizarPedidoDesdeRecepcionista(basePedido);
+            } else {
+                const pedidos = Storage.getArray('pedidos');
+                nuevoPedido = { id: generateId(), items: [...carritoActual], ...basePedido };
+                pedidos.push(nuevoPedido);
+                Storage.set('pedidos', pedidos);
+            }
             descontarStock();
 
             // ✅ Leer cilindros prestados del formulario
@@ -4720,8 +4840,8 @@
 
             if (!aplicarDefaults || rol === 'admin') return;
 
-            const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
-            const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaultVendedor = ['nuevoPedido','mensajes','pedidos','clientes','creditos'];
+            const defaultRecepcionista = ['nuevoPedido','mensajes','pedidos','clientes','creditos'];
             const defaults = rol === 'recepcionista' ? defaultRecepcionista : defaultVendedor;
 
             TODOS_MODULOS.forEach(m => {
@@ -4747,8 +4867,8 @@
             document.getElementById('usuarioRole').value = 'vendedor';
             document.getElementById('usuarioTrabajadorId').value = '';
             // Checkboxes: marcar solo los básicos por defecto
-            const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
-            const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaultVendedor = ['nuevoPedido','mensajes','pedidos','clientes','creditos'];
+            const defaultRecepcionista = ['nuevoPedido','mensajes','pedidos','clientes','creditos'];
             TODOS_MODULOS.forEach(m => {
                 const cb = document.getElementById('mod_' + m.id);
                 if (cb) cb.checked = (document.getElementById('usuarioRole').value === 'recepcionista' ? defaultRecepcionista : defaultVendedor).includes(m.id);
@@ -10532,6 +10652,204 @@
             document.getElementById('repIngDeuda').textContent     = formatCurrency(deuda);
         }
 
+
+        function pedidoEsRelacionadoConUsuario(p) {
+            if (!currentUser || !p) return false;
+            if (currentUser.role === 'admin') return true;
+            return p.vendedorAsignadoId === currentUser.id || p.creadoPorId === currentUser.id || p.usuarioId === currentUser.id;
+        }
+
+        function getMensajesPedidosStore() {
+            return Storage.getArray('mensajesPedidos');
+        }
+
+        function setMensajesPedidosStore(lista) {
+            Storage.set('mensajesPedidos', lista);
+        }
+
+        function getConversacionPedido(pedidoId) {
+            return getMensajesPedidosStore()
+                .filter(m => m.pedidoId === pedidoId)
+                .sort((a,b) => String(a.fecha||'').localeCompare(String(b.fecha||'')));
+        }
+
+        function asegurarConversacionPedido(pedido) {
+            if (!pedido) return;
+            const mensajes = getMensajesPedidosStore();
+            const existe = mensajes.some(m => m.pedidoId === pedido.id);
+            if (existe) return;
+            mensajes.push({
+                id: generateId(),
+                pedidoId: pedido.id,
+                tipo: 'sistema',
+                autorId: pedido.creadoPorId || pedido.usuarioId || 0,
+                autorNombre: pedido.usuario || 'Sistema',
+                autorRole: pedido.creadoPorRole || currentUser?.role || '',
+                texto: `Pedido creado para ${pedido.vendedorAsignadoNombre || 'vendedor'}: ${pedido.clienteNombre || 'Cliente'} • ${formatCurrency(pedido.total || 0)}`,
+                fecha: pedido.fecha || getCurrentDateTime()
+            });
+            setMensajesPedidosStore(mensajes);
+        }
+
+        function agregarMensajePedido(pedidoId, texto, tipo = 'mensaje') {
+            const pedido = Storage.getArray('pedidos').find(p => p.id === pedidoId);
+            if (!pedido || !pedidoEsRelacionadoConUsuario(pedido)) return false;
+            const contenido = String(texto || '').trim();
+            if (!contenido) return false;
+            const mensajes = getMensajesPedidosStore();
+            mensajes.push({
+                id: generateId(),
+                pedidoId,
+                tipo,
+                autorId: currentUser?.id || 0,
+                autorNombre: currentUser?.nombre || 'Usuario',
+                autorRole: currentUser?.role || '',
+                texto: contenido,
+                fecha: getCurrentDateTime()
+            });
+            setMensajesPedidosStore(mensajes);
+            return true;
+        }
+
+        function actualizarBotonMensajesHeader() {
+            const btn = document.getElementById('btnMensajesHeader');
+            const contador = document.getElementById('contadorMensajesHeader');
+            if (!btn || !contador || !currentUser) return;
+            btn.style.display = 'inline-flex';
+            btn.style.alignItems = 'center';
+            const total = getPedidosMensajes().filter(p => p.estado === 'pendiente').length + contarNotificacionesPendientes();
+            contador.textContent = total;
+            contador.style.display = total > 0 ? 'inline-block' : 'none';
+        }
+
+        function getPedidosMensajes() {
+            if (!currentUser) return [];
+            return Storage.getArray('pedidos').filter(p => {
+                const esTelefonico = p.creadoPorRole === 'recepcionista';
+                if (!esTelefonico) return false;
+                return pedidoEsRelacionadoConUsuario(p);
+            }).sort((a,b) => String(b.fecha||'').localeCompare(String(a.fecha||'')));
+        }
+
+        function abrirRespuestaMensajePedido(id) {
+            const pedido = Storage.getArray('pedidos').find(p => p.id === id);
+            if (!pedido || !pedidoEsRelacionadoConUsuario(pedido)) {
+                showNotification('No puedes responder este mensaje', 'error');
+                return;
+            }
+            const historial = getConversacionPedido(id);
+            const html = `
+                <div style="margin-bottom:14px;padding:12px;border-radius:12px;background:#f8f5ff;border:2px solid #d1c4e9;">
+                    <div style="font-weight:700;color:#4a148c;">${pedido.clienteNombre || 'Cliente'}</div>
+                    <div style="font-size:12px;color:#666;margin-top:4px;">${pedido.fecha || ''}</div>
+                    <div style="font-size:13px;color:#333;margin-top:6px;">📍 ${pedido.clienteDireccion || 'Sin dirección'}${pedido.clienteTelefono ? ' | ☎️ ' + pedido.clienteTelefono : ''}</div>
+                </div>
+                <div style="max-height:320px;overflow-y:auto;border:2px solid #eee;border-radius:12px;padding:12px;background:#fafafa;">
+                    ${historial.length ? historial.map(m => `
+                        <div style="margin-bottom:10px;display:flex;justify-content:${m.autorId === currentUser?.id ? 'flex-end' : 'flex-start'};">
+                            <div style="max-width:85%;background:${m.autorId === currentUser?.id ? '#e8f5e9' : '#f3e5f5'};border:2px solid ${m.autorId === currentUser?.id ? '#a5d6a7' : '#ce93d8'};border-radius:12px;padding:10px 12px;">
+                                <div style="font-weight:700;font-size:12px;color:#333;">${m.autorNombre || 'Usuario'} ${m.autorRole ? '• ' + String(m.autorRole).toUpperCase() : ''}</div>
+                                <div style="font-size:14px;color:#222;margin-top:4px;white-space:pre-wrap;">${m.texto || ''}</div>
+                                <div style="font-size:11px;color:#777;margin-top:4px;">${m.fecha || ''}</div>
+                            </div>
+                        </div>
+                    `).join('') : '<div style="text-align:center;color:#999;">Sin mensajes aún</div>'}
+                </div>
+                <div class="form-field" style="margin-top:14px;">
+                    <label>Responder:</label>
+                    <textarea id="respuestaMensajePedidoTexto" rows="4" placeholder="Escribe tu respuesta..." style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;"></textarea>
+                </div>
+                <div class="flex gap-2 mt-4">
+                    <button onclick="enviarRespuestaMensajePedido(${id})" class="btn btn-primary" style="flex:1;">Enviar respuesta</button>
+                    <button onclick="cerrarModal('modalResponderMensajePedido')" class="btn btn-secondary" style="flex:1;">Cerrar</button>
+                </div>
+            `;
+            const cont = document.getElementById('responderMensajePedidoContenido');
+            if (cont) cont.innerHTML = html;
+            document.getElementById('modalResponderMensajePedido').classList.add('active');
+        }
+
+        function enviarRespuestaMensajePedido(id) {
+            const el = document.getElementById('respuestaMensajePedidoTexto');
+            const texto = el?.value?.trim() || '';
+            if (!texto) {
+                showNotification('Escribe un mensaje', 'error');
+                return;
+            }
+            if (!agregarMensajePedido(id, texto, 'mensaje')) {
+                showNotification('No se pudo enviar la respuesta', 'error');
+                return;
+            }
+            showNotification('Respuesta enviada ✅', 'success');
+            abrirRespuestaMensajePedido(id);
+            if (_activeModule === 'mensajes') renderMensajes();
+        }
+
+        function renderMensajes() {
+            const pedidos = getPedidosMensajes();
+            pedidos.forEach(asegurarConversacionPedido);
+            const content = `
+                <div class="module-header">
+                    <h2>💬 MENSAJES</h2>
+                    <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
+                </div>
+                <div class="card">
+                    <div style="margin-bottom:14px;font-size:16px;font-weight:700;color:#6a1b9a;">Bandeja de mensajes y pedidos telefónicos</div>
+                    ${pedidos.length ? `
+                        <div style="display:grid;gap:12px;">
+                            ${pedidos.map(p => {
+                                const ultimos = getConversacionPedido(p.id).slice(-2);
+                                return `
+                                <div style="background:#f8f5ff;border:2px solid ${p.estado === 'pendiente' ? '#b39ddb' : '#d7ccc8'};border-radius:14px;padding:14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
+                                    <div style="flex:1;min-width:220px;">
+                                        <div style="font-weight:700;font-size:18px;color:#4a148c;">${p.clienteNombre || 'Cliente sin nombre'}</div>
+                                        <div style="font-size:12px;color:#666;margin-top:2px;">${p.fecha || ''}</div>
+                                        <div style="font-size:13px;color:#333;margin-top:6px;">📍 ${p.clienteDireccion || 'Sin dirección'}${p.clienteTelefono ? ' | ☎️ ' + p.clienteTelefono : ''}</div>
+                                        <div style="font-size:13px;color:#333;margin-top:4px;">💰 Precio sugerido: ${formatCurrency(p.total || 0)}</div>
+                                        <div style="font-size:13px;color:#333;margin-top:4px;">🔧 Válvula: ${(p.tipoValvula || 'normal').toUpperCase()}</div>
+                                        <div style="font-size:13px;color:#555;margin-top:4px;">${(p.items||[]).map(i => `${i.nombre} x${i.cantidad}`).join(', ') || 'Sin productos'}</div>
+                                        <div style="margin-top:6px;"><span style="padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : '#e8f5e9'};color:${p.estado === 'pendiente' ? '#e65100' : p.estado === 'aceptado' ? '#1565c0' : '#2d5016'};">${String(p.estado || 'pendiente').toUpperCase()}</span></div>
+                                        ${ultimos.length ? `<div style="margin-top:10px;background:white;border-radius:10px;padding:10px;border:1px solid #e0e0e0;">
+                                            <div style="font-size:12px;font-weight:700;color:#666;margin-bottom:6px;">Últimos mensajes</div>
+                                            ${ultimos.map(m => `<div style="font-size:12px;color:#333;margin-bottom:6px;"><strong>${m.autorNombre}:</strong> ${m.texto}</div>`).join('')}
+                                        </div>` : ''}
+                                    </div>
+                                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:center;">
+                                        ${(currentUser?.role === 'admin' || p.vendedorAsignadoId === currentUser?.id) && p.estado === 'pendiente' ? `<button onclick="irAPedidoRecepcionista(${p.id})" class="btn btn-primary" style="padding:8px 12px;font-size:12px;">📥 Ir a pedido</button>` : ''}
+                                        <button onclick="abrirRespuestaMensajePedido(${p.id})" class="btn btn-warning" style="padding:8px 12px;font-size:12px;">💬 Responder</button>
+                                        <button onclick="verDetallePedido(${p.id})" class="btn btn-info" style="padding:8px 12px;font-size:12px;">👁 Ver</button>
+                                        ${currentUser?.id && p.vendedorAsignadoId === currentUser.id && p.estado === 'pendiente' ? `<button onclick="aceptarPedidoVendedor(${p.id})" class="btn btn-success" style="padding:8px 12px;font-size:12px;">✅ Aceptar</button>` : ''}
+                                        ${currentUser?.id && p.vendedorAsignadoId === currentUser.id && p.estado === 'aceptado' ? `<button onclick="marcarPedidoEntregado(${p.id})" class="btn btn-primary" style="padding:8px 12px;font-size:12px;">📦 Entregado</button>` : ''}
+                                    </div>
+                                </div>`;
+                            }).join('')}
+                        </div>
+                    ` : `<div style="text-align:center;color:#999;padding:30px 10px;">No hay mensajes por ahora</div>`}
+                </div>
+                <div id="modalDetallePedido" class="modal">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Detalle del Pedido</h3>
+                            <button class="btn-close" onclick="cerrarModal('modalDetallePedido')">×</button>
+                        </div>
+                        <div id="detallePedidoContenido"></div>
+                    </div>
+                </div>
+                <div id="modalResponderMensajePedido" class="modal">
+                    <div class="modal-content" style="max-width:700px;">
+                        <div class="modal-header">
+                            <h3>💬 Conversación del pedido</h3>
+                            <button class="btn-close" onclick="cerrarModal('modalResponderMensajePedido')">×</button>
+                        </div>
+                        <div id="responderMensajePedidoContenido"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('moduleContent').innerHTML = content;
+            actualizarBotonMensajesHeader();
+            actualizarAlertaSonoraPedidos();
+        }
+
         // ==================== MÓDULO: PEDIDOS ====================
         function renderPedidos() {
             const todosPedidos = Storage.getArray('pedidos');
@@ -10569,7 +10887,7 @@
                             </select>
                         </div>
                     </div>
-                    ${contarNotificacionesPendientes() > 0 ? `<div style="background:#fff3e0;border:2px solid #ffb74d;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-weight:700;color:#e65100;">🔔 Tienes ${contarNotificacionesPendientes()} pedido(s) nuevos pendientes de revisar</div>` : ""}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px;">
                         <div id="resumenPedidos" style="font-size:16px;font-weight:700;color:#2d5016;"></div>
                         <button onclick="limpiarFiltrosPedidos()" class="btn btn-secondary">Limpiar Filtros</button>
                     </div>
@@ -10639,8 +10957,6 @@
                     <td><span style="padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;background:${colorEstado};color:${txtEstado}">${String(p.estado||'').toUpperCase()}</span></td>
                     <td style="white-space:nowrap;">
                         <button onclick="verDetallePedido(${p.id})" class="btn btn-info" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">👁 Ver</button>
-                        ${puedeAceptar ? `<button onclick="aceptarPedidoVendedor(${p.id})" class="btn btn-success" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">✅ Aceptar</button>` : ''}
-                        ${puedeEntregar ? `<button onclick="marcarPedidoEntregado(${p.id})" class="btn btn-primary" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">📦 Entregado</button>` : ''}
                         ${esAdmin ? `
                         <button onclick="editarPedido(${p.id})" class="btn btn-warning" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">✏️ Editar</button>
                         <button onclick="eliminarPedido(${p.id})" class="btn btn-danger" style="padding:5px 10px;font-size:12px;">🗑 Eliminar</button>
@@ -10692,6 +11008,8 @@
                     <div><strong>Fecha:</strong> ${p.fecha}</div>
                     <div><strong>Trabajador:</strong> ${p.trabajadorCodigo ? '['+p.trabajadorCodigo+'] ' : ''}${p.trabajadorNombre || 'Sin asignar'}</div>
                     <div><strong>Estado:</strong> ${p.estado.toUpperCase()}</div>
+                    <div><strong>Teléfono:</strong> ${p.clienteTelefono || '—'}</div>
+                    <div><strong>Dirección:</strong> ${p.clienteDireccion || '—'}</div>
                     <div><strong>Tipo Pago:</strong> ${p.tipoPago === 'credito' ? '📋 Crédito' : p.tipoPago === 'mixto' ? '🔄 Mixto' : p.tipoPago === 'pendiente' ? '📞 Telefónico' : '💵 Normal'}</div>
                     <div><strong>Tipo válvula:</strong> ${(p.tipoValvula || 'normal').toUpperCase()}</div>
                     <div><strong>Vendedor asignado:</strong> ${p.vendedorAsignadoNombre || 'No aplica'}</div>
