@@ -1426,28 +1426,29 @@
             return true;
         }
 
+        function normalizarDatoFirebasePorClave(key, val) {
+            if (val === null || val === undefined) return null;
+            if (key === "caja" || String(key).startsWith("caja_u")) return val;
+            if (Array.isArray(val)) return val;
+            if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
+            return val;
+        }
+
         async function cargarDatosDesdeNubeUnaVez() {
             if (!_fbReady || !_db) return false;
             const snap = await _db.ref('costagas').once('value');
             const cloudData = snap.val();
             if (!cloudData) return false;
 
-            function fbNodoAArray(val) {
-                if (!val) return null;
-                if (Array.isArray(val)) return val;
-                if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
-                return val;
-            }
-
             DB_KEYS.forEach(k => {
                 if (cloudData[k] === undefined) return;
-                const val = fbNodoAArray(cloudData[k]);
+                const val = normalizarDatoFirebasePorClave(k, cloudData[k]);
                 localStorage.setItem(k, JSON.stringify(val));
             });
 
             Object.keys(cloudData).forEach(k => {
                 if (!k.startsWith('caja_u')) return;
-                const val = fbNodoAArray(cloudData[k]);
+                const val = normalizarDatoFirebasePorClave(k, cloudData[k]);
                 localStorage.setItem(k, JSON.stringify(val));
             });
 
@@ -1535,12 +1536,6 @@
                 }
 
                 // Helper: convierte nodo Firebase (objeto {id:datos} o array) → array local
-                function fbNodoAArray(val) {
-                    if (!val) return null;
-                    if (Array.isArray(val)) return val;
-                    if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
-                    return val;
-                }
 
                 // Sincronizar en segundo plano con timeout de 5s (no bloquea nada)
                 const _syncTimeout = setTimeout(() => {
@@ -1601,12 +1596,12 @@
                         // Nube tiene datos → actualizar localStorage en segundo plano
                         DB_KEYS.forEach(k => {
                             if (cloudData[k] === undefined) return;
-                            const val = fbNodoAArray(cloudData[k]);
+                            const val = normalizarDatoFirebasePorClave(k, cloudData[k]);
                             localStorage.setItem(k, JSON.stringify(val));
                         });
                         Object.keys(cloudData).forEach(k => {
                             if (!k.startsWith('caja_u')) return;
-                            const val = fbNodoAArray(cloudData[k]);
+                            const val = normalizarDatoFirebasePorClave(k, cloudData[k]);
                             localStorage.setItem(k, JSON.stringify(val));
                         });
                         localStorage.setItem('_cloudDataLoaded', 'true');
@@ -1707,17 +1702,11 @@
                 _db.ref('costagas').once('value').then(snap => {
                     const all = snap.val();
                     if (!all) { showNotification('Sin datos en la nube', 'info'); return; }
-                    function fbNodoAArray(val) {
-                        if (!val) return null;
-                        if (Array.isArray(val)) return val;
-                        if (typeof val === "object") return Object.values(val).filter(v => v !== null && v !== undefined);
-                        return val;
-                    }
                     DB_KEYS.forEach(k => {
-                        if (all[k] !== undefined) localStorage.setItem(k, JSON.stringify(fbNodoAArray(all[k])));
+                        if (all[k] !== undefined) localStorage.setItem(k, JSON.stringify(normalizarDatoFirebasePorClave(k, all[k])));
                     });
                     Object.keys(all).forEach(k => {
-                        if (k.startsWith('caja_u')) localStorage.setItem(k, JSON.stringify(fbNodoAArray(all[k])));
+                        if (k.startsWith('caja_u')) localStorage.setItem(k, JSON.stringify(normalizarDatoFirebasePorClave(k, all[k])));
                     });
                     updateDashboard();
                     refreshActiveModule();
@@ -1969,6 +1958,7 @@
             return usuarios.filter(u => {
                 if (!u || u.role !== 'vendedor') return false;
                 const caja = Storage.get('caja_u' + u.id) || {};
+                if (Array.isArray(caja)) return false;
                 return caja.estado === 'abierta';
             });
         }
