@@ -1957,9 +1957,153 @@
             if (!u || (u.role === 'admin' && !_adminViewingUser)) return pedidos;
             return pedidos.filter(p =>
                 p.trabajadorId === u.trabajadorId ||
-                p.usuarioId    === u.id ||
+                p.usuarioId === u.id ||
+                p.vendedorAsignadoId === u.id ||
+                p.creadoPorId === u.id ||
                 (p.usuario||'').toLowerCase() === (u.nombre||'').toLowerCase()
             );
+        }
+
+        function getUsuariosVendedoresConCajaAbierta() {
+            const usuarios = Storage.getArray('usuarios');
+            return usuarios.filter(u => {
+                if (!u || u.role !== 'vendedor') return false;
+                const caja = Storage.get('caja_u' + u.id) || {};
+                return caja.estado === 'abierta';
+            });
+        }
+
+        function crearNotificacionPedido(pedido) {
+            if (!pedido || !pedido.vendedorAsignadoId) return;
+            const notificaciones = Storage.getArray('notificacionesPedidos');
+            notificaciones.push({
+                id: generateId(),
+                pedidoId: pedido.id,
+                paraUsuarioId: pedido.vendedorAsignadoId,
+                mensaje: 'Nuevo pedido telefónico pendiente',
+                leida: false,
+                fecha: getCurrentDateTime()
+            });
+            Storage.set('notificacionesPedidos', notificaciones);
+        }
+
+        function contarNotificacionesPendientes() {
+            if (!currentUser) return 0;
+            const notificaciones = Storage.getArray('notificacionesPedidos');
+            return notificaciones.filter(n => n.paraUsuarioId === currentUser.id && !n.leida).length;
+        }
+
+        function marcarNotificacionLeidaPorPedido(pedidoId) {
+            const notificaciones = Storage.getArray('notificacionesPedidos');
+            let cambio = false;
+            notificaciones.forEach(n => {
+                if (n.pedidoId === pedidoId && n.paraUsuarioId === currentUser?.id && !n.leida) {
+                    n.leida = true;
+                    cambio = true;
+                }
+            });
+            if (cambio) Storage.set('notificacionesPedidos', notificaciones);
+        }
+
+        function obtenerTrabajadorDeUsuario(usuarioId) {
+            const usuario = Storage.getArray('usuarios').find(u => u.id === usuarioId);
+            if (!usuario || !usuario.trabajadorId) return null;
+            const t = Storage.getArray('trabajadores').find(x => x.id === usuario.trabajadorId);
+            return t ? { id: t.id, codigo: t.codigo || '', nombre: t.nombre || '' } : null;
+        }
+
+        function aceptarPedidoVendedor(id) {
+            const pedidos = Storage.getArray('pedidos');
+            const pedido = pedidos.find(p => p.id === id);
+            if (!pedido) return;
+            if (pedido.vendedorAsignadoId !== currentUser?.id && currentUser?.role !== 'admin') {
+                showNotification('Este pedido no te corresponde', 'error');
+                return;
+            }
+            const trabajador = obtenerTrabajadorDeUsuario(currentUser.id);
+            if (trabajador) {
+                pedido.trabajadorId = trabajador.id;
+                pedido.trabajadorCodigo = trabajador.codigo;
+                pedido.trabajadorNombre = trabajador.nombre;
+            }
+            pedido.estado = 'aceptado';
+            pedido.fechaAceptacion = getCurrentDateTime();
+            pedido.aceptadoPor = currentUser.nombre;
+            marcarNotificacionLeidaPorPedido(id);
+            Storage.set('pedidos', pedidos);
+            showNotification('Pedido aceptado ✅', 'success');
+            renderPedidos();
+        }
+
+        function marcarPedidoEntregado(id) {
+            const pedidos = Storage.getArray('pedidos');
+            const pedido = pedidos.find(p => p.id === id);
+            if (!pedido) return;
+            if (pedido.vendedorAsignadoId !== currentUser?.id && currentUser?.role !== 'admin') {
+                showNotification('Este pedido no te corresponde', 'error');
+                return;
+            }
+            pedido.estado = 'entregado';
+            pedido.fechaEntrega = getCurrentDateTime();
+            pedido.entregadoPor = currentUser.nombre;
+            Storage.set('pedidos', pedidos);
+            showNotification('Pedido marcado como entregado ✅', 'success');
+            renderPedidos();
+        }
+
+        function procesarPedidoRecepcionista() {
+            if (carritoActual.length === 0) {
+                showNotification('El carrito está vacío', 'error');
+                return;
+            }
+            const nombreCliente = document.getElementById('clienteNombre').value.trim();
+            if (!nombreCliente) {
+                showNotification('Ingrese el nombre del cliente', 'error');
+                return;
+            }
+            const vendedorId = parseInt(document.getElementById('pedidoVendedorTurno')?.value || '0');
+            if (!vendedorId) {
+                showNotification('Selecciona el vendedor de turno', 'error');
+                const el = document.getElementById('pedidoVendedorTurno');
+                if (el) { el.style.borderColor = '#f44336'; el.focus(); }
+                return;
+            }
+            const vendedor = Storage.getArray('usuarios').find(u => u.id === vendedorId);
+            if (!vendedor) {
+                showNotification('No se encontró el vendedor asignado', 'error');
+                return;
+            }
+            const clienteId = guardarObtenerCliente(nombreCliente);
+            const total = carritoActual.reduce((sum, item) => sum + (item.precio * item.cantidad), 0);
+            const pedido = {
+                id: generateId(),
+                clienteId,
+                clienteNombre: nombreCliente,
+                clienteTelefono: document.getElementById('clienteTelefono')?.value || '',
+                clienteDireccion: document.getElementById('clienteDireccion')?.value || '',
+                items: [...carritoActual],
+                total,
+                pagos: { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0 },
+                tipoPago: 'pendiente',
+                tipoValvula: document.getElementById('pedidoTipoValvula')?.value || 'normal',
+                fecha: getCurrentDateTime(),
+                estado: 'pendiente',
+                usuario: currentUser.nombre,
+                usuarioId: currentUser.id,
+                creadoPorId: currentUser.id,
+                creadoPorRole: currentUser.role,
+                vendedorAsignadoId: vendedor.id,
+                vendedorAsignadoNombre: vendedor.nombre,
+                trabajadorId: null,
+                trabajadorCodigo: '',
+                trabajadorNombre: ''
+            };
+            const pedidos = Storage.getArray('pedidos');
+            pedidos.push(pedido);
+            Storage.set('pedidos', pedidos);
+            crearNotificacionPedido(pedido);
+            showNotification('Pedido enviado al vendedor ✅', 'success');
+            limpiarPedido();
         }
 
         async function login(event) {
@@ -2830,6 +2974,7 @@
             }
             // Por defecto vendedor solo ve estos módulos básicos
             const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
             return defaultVendedor.includes(module);
         }
 
@@ -3109,6 +3254,8 @@
             const productos = Storage.getArray('productos');
             const clientes = Storage.getArray('clientes');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             
             const content = `
                 <div class="module-header">
@@ -3134,6 +3281,24 @@
                             <label>Dirección (opcional):</label>
                             <input type="text" id="clienteDireccion" placeholder="Dirección de entrega">
                         </div>
+                        ${esRecepcionista ? `
+                        <div class="form-field">
+                            <label>🔩 Tipo de válvula:</label>
+                            <select id="pedidoTipoValvula" style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:Rajdhani,sans-serif;">
+                                <option value="normal">Normal</option>
+                                <option value="premium">Premium</option>
+                            </select>
+                            <div style="margin-top:5px;font-size:12px;color:#555;">Elige el tipo de válvula del balón solicitado.</div>
+                        </div>
+                        <div class="form-field">
+                            <label>🛵 Vendedor de turno: <span style="color:#f44336;font-size:12px;">* obligatorio</span></label>
+                            <select id="pedidoVendedorTurno" style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:Rajdhani,sans-serif;">
+                                <option value="">-- Seleccionar vendedor con caja abierta --</option>
+                                ${vendedoresTurno.map(v => `<option value="${v.id}">${v.nombre}</option>`).join('')}
+                            </select>
+                            <div style="margin-top:5px;font-size:12px;color:${vendedoresTurno.length ? '#2d5016' : '#f44336'};font-weight:700;">${vendedoresTurno.length ? 'Solo aparecen usuarios vendedor con caja abierta.' : 'No hay vendedores con caja abierta en este momento.'}</div>
+                        </div>
+                        ` : `
                         <div class="form-field">
                             <label>👷 Trabajador Asignado: ${currentUser?.trabajadorId || currentUser?.role==='admin' ? '' : '<span style="color:#f44336;font-size:12px;">* obligatorio</span>'}</label>
                             <select id="pedidoTrabajador"
@@ -3144,6 +3309,7 @@
                             </select>
                             ${currentUser?.trabajadorId && currentUser?.role !== 'admin' ? '<div style="margin-top:5px;font-size:12px;color:#2d5016;font-weight:700;">🔒 Asignado según tu usuario</div>' : '<div style="margin-top:5px;font-size:12px;color:#e65100;">⚠ Debes seleccionar el trabajador para registrar este pedido</div>'}
                         </div>
+                        `}
                     </div>
 
                     <!-- ══ CILINDROS PRESTADOS ══ -->
@@ -3234,8 +3400,8 @@
                                 <div class="cart-total-value" id="totalCarrito">S/. 0.00</div>
                             </div>
                             
-                            <button onclick="mostrarPagos()" class="btn btn-primary w-full" style="margin-top: 20px; padding: 16px; font-size: 20px;">
-                                PROCESAR PEDIDO
+                            <button onclick="${esRecepcionista ? 'procesarPedidoRecepcionista()' : 'mostrarPagos()'}" class="btn btn-primary w-full" style="margin-top: 20px; padding: 16px; font-size: 20px;">
+                                ${esRecepcionista ? 'ENVIAR PEDIDO AL VENDEDOR' : 'PROCESAR PEDIDO'}
                             </button>
                         </div>
                     </div>
@@ -4302,6 +4468,8 @@
         function renderUsuarios() {
             const usuarios = Storage.getArray('usuarios');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             // Código actual
             const codigoData = Storage.get('dispositivoCodigo') || {};
             const codigoActivo = codigoData.code && codigoData.expira && Date.now() < codigoData.expira;
@@ -4412,6 +4580,7 @@
                                     <label>Rol:</label>
                                     <select id="usuarioRole" required onchange="toggleCheckboxModulos()">
                                         <option value="vendedor">Vendedor</option>
+                                        <option value="recepcionista">Recepcionista</option>
                                         <option value="admin">Administrador</option>
                                     </select>
                                 </div>
@@ -4427,14 +4596,14 @@
                                     ${trabajadores.map(t => `<option value="${t.id}" data-nombre="${t.nombre}" data-codigo="${t.codigo||''}">${t.codigo ? '['+t.codigo+'] ' : ''}${t.nombre} — ${t.cargo}</option>`).join('')}
                                 </select>
                                 <div style="margin-top:8px;font-size:12px;color:#555;">
-                                    💡 Al vincular un trabajador, en "Nuevo Pedido" e "Ingresos de Caja" se asignará automáticamente y no podrá cambiarse si el rol es <strong>Vendedor</strong>.
+                                    💡 Al vincular un trabajador, en "Nuevo Pedido" e "Ingresos de Caja" se asignará automáticamente y no podrá cambiarse si el rol es <strong>Vendedor</strong>. En recepcionista el pedido se asigna al vendedor de turno.
                                 </div>
                             </div>
 
                             <!-- Permisos de módulos (solo para vendedor) -->
                             <div id="seccionModulos" style="margin-bottom:20px;">
                                 <label style="font-weight:700;font-size:16px;display:block;margin-bottom:10px;">
-                                    🔐 Módulos que puede ver este vendedor:
+                                    🔐 Módulos que puede ver este usuario:
                                 </label>
                                 <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:10px;">
                                     <button type="button" onclick="marcarTodosModulos(true)" class="btn btn-success" style="padding:6px 14px;font-size:13px;">✅ Marcar todos</button>
@@ -4488,9 +4657,10 @@
             document.getElementById('usuarioTrabajadorId').value = '';
             // Checkboxes: marcar solo los básicos por defecto
             const defaultVendedor = ['nuevoPedido','pedidos','clientes','creditos'];
+            const defaultRecepcionista = ['nuevoPedido','pedidos','clientes','creditos'];
             TODOS_MODULOS.forEach(m => {
                 const cb = document.getElementById('mod_' + m.id);
-                if (cb) cb.checked = defaultVendedor.includes(m.id);
+                if (cb) cb.checked = (document.getElementById('usuarioRole').value === 'recepcionista' ? defaultRecepcionista : defaultVendedor).includes(m.id);
             });
             toggleCheckboxModulos();
             document.getElementById('modalUsuario').classList.add('active');
@@ -4534,9 +4704,9 @@
             }
             
             const rol = document.getElementById('usuarioRole').value;
-            // Leer checkboxes solo si es vendedor
+            // Leer checkboxes si es vendedor o recepcionista
             let modulosPermitidos = null;
-            if (rol === 'vendedor') {
+            if (rol === 'vendedor' || rol === 'recepcionista') {
                 modulosPermitidos = TODOS_MODULOS
                     .map(m => m.id)
                     .filter(id => document.getElementById('mod_' + id)?.checked);
@@ -5729,6 +5899,8 @@
             const clientes = Storage.getArray('clientes');
             const creditos = Storage.getArray('creditos');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const content = `
                 <div class="module-header">
                     <h2>CLIENTES</h2>
@@ -6726,6 +6898,8 @@
             const totalHoy = gastosHoy.reduce((s,g) => s + g.monto, 0);
             const categorias = ['Combustible', 'Mantenimiento', 'Servicios', 'Sueldos', 'Alquiler', 'Otros'];
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const content = `
                 <div class="module-header">
                     <h2>GASTOS</h2>
@@ -6844,6 +7018,8 @@
             const proveedores = Storage.getArray('proveedores');
             const productos = Storage.getArray('productos');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const pendientes = ingresos.filter(i => i.estadoPago === 'credito');
             const totalDeuda = pendientes.reduce((s,i) => s + (i.saldoPendiente || 0), 0);
             const totalIngresos = ingresos.reduce((s,i) => s + i.total, 0);
@@ -7118,6 +7294,8 @@
             const proveedores = Storage.getArray('proveedores');
             const productos   = Storage.getArray('productos');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const ss = 'width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;';
 
             // Crear modal dinámico
@@ -7565,6 +7743,8 @@
             );
             const clientes = Storage.getArray('clientes');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const pendientes = creditos.filter(c => c && c.estado === 'pendiente');
             const totalPendiente = pendientes.reduce((s,c) => s + c.saldo, 0);
             const content = `
@@ -8239,6 +8419,8 @@
                 (i.usuario||'').toLowerCase() === (currentUser?.nombre||'').toLowerCase()
             );
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const hoy = getCurrentDate();
             const ss = 'width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;';
             const hoyReg  = ingresosCaja.filter(i => i.fecha.substring(0,10) === hoy);
@@ -10288,12 +10470,15 @@
                             <label>Estado:</label>
                             <select id="pedidoEstado" onchange="filtrarPedidosTabla()" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;">
                                 <option value="">Todos</option>
+                                <option value="pendiente">Pendiente</option>
+                                <option value="aceptado">Aceptado</option>
+                                <option value="entregado">Entregado</option>
                                 <option value="completado">Completado</option>
                                 <option value="credito">Crédito</option>
                             </select>
                         </div>
                     </div>
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px;">
+                    ${contarNotificacionesPendientes() > 0 ? `<div style="background:#fff3e0;border:2px solid #ffb74d;border-radius:12px;padding:12px 16px;margin-bottom:12px;font-weight:700;color:#e65100;">🔔 Tienes ${contarNotificacionesPendientes()} pedido(s) nuevos pendientes de revisar</div>` : ""}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:10px;">
                         <div id="resumenPedidos" style="font-size:16px;font-weight:700;color:#2d5016;"></div>
                         <button onclick="limpiarFiltrosPedidos()" class="btn btn-secondary">Limpiar Filtros</button>
                     </div>
@@ -10343,23 +10528,34 @@
         function generarFilasPedidos(pedidos) {
             if (!pedidos.length) return '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">Sin pedidos</td></tr>';
             const esAdmin = currentUser?.role === 'admin';
-            return pedidos.slice().reverse().map(p => `
-                <tr data-fecha="${p.fecha}" data-cliente="${(p.clienteNombre||'').toLowerCase()}" data-trabajador="${(p.trabajadorNombre||'').toLowerCase()} ${(p.trabajadorCodigo||'').toLowerCase()}" data-productos="${(p.items||[]).map(i=>i.nombre).join(' ').toLowerCase()}" data-estado="${p.estado}">
+            return pedidos.slice().reverse().map(p => {
+                const puedeAceptar = currentUser?.id && p.vendedorAsignadoId === currentUser.id && p.estado === 'pendiente';
+                const puedeEntregar = currentUser?.id && p.vendedorAsignadoId === currentUser.id && (p.estado === 'aceptado');
+                const colorEstado = p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : p.estado === 'entregado' || p.estado === 'completado' ? '#e8f5e9' : p.estado === 'credito' ? '#fff3e0' : '#f5f5f5';
+                const txtEstado = p.estado === 'pendiente' ? '#e65100' : p.estado === 'aceptado' ? '#1565c0' : p.estado === 'entregado' || p.estado === 'completado' ? '#2d5016' : p.estado === 'credito' ? '#e65100' : '#666';
+                const badgePago = p.tipoPago === 'credito' ? '<span style="padding:3px 8px;background:#fff3e0;color:#e65100;border-radius:8px;font-size:12px;font-weight:700;">📋 CRÉDITO</span>' : p.tipoPago === 'mixto' ? '<span style="padding:3px 8px;background:#e3f2fd;color:#1565c0;border-radius:8px;font-size:12px;font-weight:700;">🔄 MIXTO</span>' : p.tipoPago === 'pendiente' ? '<span style="padding:3px 8px;background:#f3e5f5;color:#7b1fa2;border-radius:8px;font-size:12px;font-weight:700;">📞 TELEFÓNICO</span>' : '<span style="padding:3px 8px;background:#e8f5e9;color:#2d5016;border-radius:8px;font-size:12px;font-weight:700;">💵 NORMAL</span>';
+                const extraAsignacion = p.vendedorAsignadoNombre ? '<div style="font-size:11px;color:#7b1fa2;font-weight:700;margin-top:2px;">Vendedor: ' + p.vendedorAsignadoNombre + '</div>' : '';
+                const extraValvula = p.tipoValvula ? '<div style="font-size:11px;color:#555;margin-top:2px;">Válvula: ' + String(p.tipoValvula).toUpperCase() + '</div>' : '';
+                return `
+                <tr data-fecha="${p.fecha}" data-cliente="${(p.clienteNombre||'').toLowerCase()}" data-trabajador="${((p.trabajadorNombre||'') + ' ' + (p.trabajadorCodigo||'') + ' ' + (p.vendedorAsignadoNombre||'')).toLowerCase()}" data-productos="${(p.items||[]).map(i=>i.nombre).join(' ').toLowerCase()} ${(p.tipoValvula||'').toLowerCase()}" data-estado="${p.estado}">
                     <td style="white-space:nowrap;font-size:12px;">${p.fecha}</td>
-                    <td><strong>${p.clienteNombre}</strong></td>
-                    <td>${p.trabajadorCodigo ? '<span style="font-size:12px;font-weight:700;background:#e8f5e9;color:#2d5016;padding:2px 8px;border-radius:6px;">' + p.trabajadorCodigo + '</span> ' : ''}${p.trabajadorNombre || '<span style="color:#999">-</span>'}</td>
+                    <td><strong>${p.clienteNombre}</strong>${extraValvula}</td>
+                    <td>${p.trabajadorCodigo ? '<span style="font-size:12px;font-weight:700;background:#e8f5e9;color:#2d5016;padding:2px 8px;border-radius:6px;">' + p.trabajadorCodigo + '</span> ' : ''}${p.trabajadorNombre || '<span style="color:#999">Sin asignar</span>'}${extraAsignacion}</td>
                     <td style="font-size:13px;">${(p.items||[]).map(i=>i.nombre+' x'+i.cantidad).join(', ')}</td>
                     <td style="font-weight:700;color:#2d5016;white-space:nowrap;">${formatCurrency(p.total)}</td>
-                    <td>${p.tipoPago === 'credito' ? '<span style="padding:3px 8px;background:#fff3e0;color:#e65100;border-radius:8px;font-size:12px;font-weight:700;">📋 CRÉDITO</span>' : p.tipoPago === 'mixto' ? '<span style="padding:3px 8px;background:#e3f2fd;color:#1565c0;border-radius:8px;font-size:12px;font-weight:700;">🔄 MIXTO</span>' : '<span style="padding:3px 8px;background:#e8f5e9;color:#2d5016;border-radius:8px;font-size:12px;font-weight:700;">💵 NORMAL</span>'}</td>
-                    <td><span style="padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;background:${p.estado==='completado'?'#e8f5e9':p.estado==='credito'?'#fff3e0':'#f5f5f5'};color:${p.estado==='completado'?'#2d5016':p.estado==='credito'?'#e65100':'#666'}">${p.estado.toUpperCase()}</span></td>
+                    <td>${badgePago}</td>
+                    <td><span style="padding:3px 10px;border-radius:10px;font-size:12px;font-weight:700;background:${colorEstado};color:${txtEstado}">${String(p.estado||'').toUpperCase()}</span></td>
                     <td style="white-space:nowrap;">
                         <button onclick="verDetallePedido(${p.id})" class="btn btn-info" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">👁 Ver</button>
+                        ${puedeAceptar ? `<button onclick="aceptarPedidoVendedor(${p.id})" class="btn btn-success" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">✅ Aceptar</button>` : ''}
+                        ${puedeEntregar ? `<button onclick="marcarPedidoEntregado(${p.id})" class="btn btn-primary" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">📦 Entregado</button>` : ''}
                         ${esAdmin ? `
                         <button onclick="editarPedido(${p.id})" class="btn btn-warning" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">✏️ Editar</button>
                         <button onclick="eliminarPedido(${p.id})" class="btn btn-danger" style="padding:5px 10px;font-size:12px;">🗑 Eliminar</button>
                         ` : ''}
                     </td>
-                </tr>`).join('');
+                </tr>`;
+            }).join('');
         }
 
         function filtrarPedidosTabla() {
@@ -10404,7 +10600,9 @@
                     <div><strong>Fecha:</strong> ${p.fecha}</div>
                     <div><strong>Trabajador:</strong> ${p.trabajadorCodigo ? '['+p.trabajadorCodigo+'] ' : ''}${p.trabajadorNombre || 'Sin asignar'}</div>
                     <div><strong>Estado:</strong> ${p.estado.toUpperCase()}</div>
-                    <div><strong>Tipo Pago:</strong> ${p.tipoPago === 'credito' ? '📋 Crédito' : p.tipoPago === 'mixto' ? '🔄 Mixto' : '💵 Normal'}</div>
+                    <div><strong>Tipo Pago:</strong> ${p.tipoPago === 'credito' ? '📋 Crédito' : p.tipoPago === 'mixto' ? '🔄 Mixto' : p.tipoPago === 'pendiente' ? '📞 Telefónico' : '💵 Normal'}</div>
+                    <div><strong>Tipo válvula:</strong> ${(p.tipoValvula || 'normal').toUpperCase()}</div>
+                    <div><strong>Vendedor asignado:</strong> ${p.vendedorAsignadoNombre || 'No aplica'}</div>
                     <div><strong>Usuario:</strong> ${p.usuario}</div>
                 </div>
                 <h4 style="margin-bottom:10px;">Productos:</h4>
@@ -10505,6 +10703,8 @@
             if (!p) return;
             window._epItems = (p.items||[]).map(i => ({...i}));
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
+            const esRecepcionista = currentUser?.role === 'recepcionista';
+            const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
             const productos = Storage.getArray('productos');
             const pagos = p.pagos || {};
             const fechaInput = (p.fecha||'').replace(' ','T').substring(0,16);
