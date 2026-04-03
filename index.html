@@ -1982,14 +1982,14 @@
             if (!pedidos.length) {
                 return `
                     <div class="card" style="border:2px dashed #b39ddb;background:#faf7ff;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#6a1b9a;margin-bottom:8px;">☎️ Pedidos enviados por recepción</div>
+                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#6a1b9a;margin-bottom:8px;">☎️ Lista de pedidos enviados por recepción</div>
                         <div style="color:#777;">Todavía no has enviado pedidos telefónicos desde este usuario.</div>
                     </div>`;
             }
             return `
                 <div class="card" style="border:2px solid #6a1b9a;background:#faf7ff;">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#6a1b9a;">☎️ Pedidos enviados por recepción</div>
+                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#6a1b9a;">☎️ Lista de pedidos enviados por recepción</div>
                         <div style="background:#6a1b9a;color:#fff;padding:6px 12px;border-radius:999px;font-weight:700;">${pedidos.length} pedido${pedidos.length!==1?'s':''}</div>
                     </div>
                     <div style="display:grid;gap:10px;">
@@ -2025,14 +2025,14 @@
             if (!pedidos.length) {
                 return `
                     <div class="card" style="border:2px dashed #d7ccc8;background:#fffaf4;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#8d6e63;margin-bottom:8px;">📞 Pedidos asignados por recepción</div>
+                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#8d6e63;margin-bottom:8px;">📞 Cola de pedidos asignados por recepción</div>
                         <div style="color:#777;">No tienes pedidos telefónicos pendientes o aceptados en este momento.</div>
                     </div>`;
             }
             return `
                 <div class="card" style="border:2px solid #7b1fa2;background:#fcf7ff;">
                     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#7b1fa2;">📞 Pedidos asignados por recepción</div>
+                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#7b1fa2;">📞 Cola de pedidos asignados por recepción</div>
                         <div style="background:#7b1fa2;color:#fff;padding:6px 12px;border-radius:999px;font-weight:700;">${pedidos.length} pedido${pedidos.length!==1?'s':''}</div>
                     </div>
                     <div style="display:grid;gap:12px;">
@@ -2146,6 +2146,8 @@
 
         let _pedidoToneTimer = null;
         let _pedidoAudioCtx = null;
+        let _pedidoMasterGain = null;
+        let _pedidoCompressor = null;
 
         function contarAlertasSonorasPendientes() {
             if (!currentUser || currentUser.role !== 'vendedor') return 0;
@@ -2161,27 +2163,48 @@
                 if (_pedidoAudioCtx.state === 'suspended') {
                     _pedidoAudioCtx.resume().catch(() => {});
                 }
+                if (!_pedidoMasterGain) {
+                    _pedidoMasterGain = _pedidoAudioCtx.createGain();
+                    _pedidoMasterGain.gain.value = 1.0;
+                    _pedidoCompressor = _pedidoAudioCtx.createDynamicsCompressor();
+                    _pedidoCompressor.threshold.value = -22;
+                    _pedidoCompressor.knee.value = 18;
+                    _pedidoCompressor.ratio.value = 14;
+                    _pedidoCompressor.attack.value = 0.002;
+                    _pedidoCompressor.release.value = 0.16;
+                    _pedidoMasterGain.connect(_pedidoCompressor);
+                    _pedidoCompressor.connect(_pedidoAudioCtx.destination);
+                }
                 const now = _pedidoAudioCtx.currentTime;
-                [
-                    {off:0.00, freq:980,  type:'square',   vol:0.72, dur:0.26},
-                    {off:0.28, freq:1320, type:'sawtooth', vol:0.62, dur:0.24},
-                    {off:0.58, freq:980,  type:'square',   vol:0.72, dur:0.30},
-                    {off:0.94, freq:1480, type:'square',   vol:0.66, dur:0.24}
-                ].forEach(t => {
-                    const osc = _pedidoAudioCtx.createOscillator();
+                const secuencia = [
+                    {off:0.00, freq:880,  type:'square',   vol:0.98, dur:0.16},
+                    {off:0.18, freq:1320, type:'square',   vol:0.98, dur:0.16},
+                    {off:0.36, freq:1760, type:'square',   vol:0.96, dur:0.18},
+                    {off:0.60, freq:1320, type:'sawtooth', vol:0.94, dur:0.16},
+                    {off:0.78, freq:1760, type:'square',   vol:1.00, dur:0.20},
+                    {off:1.02, freq:2200, type:'square',   vol:1.00, dur:0.24}
+                ];
+                secuencia.forEach(t => {
+                    const osc1 = _pedidoAudioCtx.createOscillator();
+                    const osc2 = _pedidoAudioCtx.createOscillator();
                     const gain = _pedidoAudioCtx.createGain();
-                    osc.type = t.type;
-                    osc.frequency.setValueAtTime(t.freq, now + t.off);
+                    osc1.type = t.type;
+                    osc2.type = 'square';
+                    osc1.frequency.setValueAtTime(t.freq, now + t.off);
+                    osc2.frequency.setValueAtTime(t.freq * 0.5, now + t.off);
                     gain.gain.setValueAtTime(0.0001, now + t.off);
-                    gain.gain.exponentialRampToValueAtTime(t.vol, now + t.off + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(t.vol, now + t.off + 0.008);
                     gain.gain.exponentialRampToValueAtTime(0.0001, now + t.off + t.dur);
-                    osc.connect(gain);
-                    gain.connect(_pedidoAudioCtx.destination);
-                    osc.start(now + t.off);
-                    osc.stop(now + t.off + t.dur + 0.03);
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(_pedidoMasterGain);
+                    osc1.start(now + t.off);
+                    osc2.start(now + t.off);
+                    osc1.stop(now + t.off + t.dur + 0.04);
+                    osc2.stop(now + t.off + t.dur + 0.04);
                 });
                 if (navigator.vibrate) {
-                    navigator.vibrate([300, 120, 300, 120, 450]);
+                    navigator.vibrate([450, 120, 450, 120, 650, 120, 650]);
                 }
             } catch (e) {}
         }
@@ -2204,7 +2227,7 @@
                         } else {
                             detenerAlertaSonoraPedidos();
                         }
-                    }, 1300);
+                    }, 900);
                 }
             } else {
                 detenerAlertaSonoraPedidos();
