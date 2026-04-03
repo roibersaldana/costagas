@@ -906,6 +906,137 @@
   border:2px solid #ffcc80;
 }
 
+
+
+/* ===== AJUSTE GLOBAL DE TIPOGRAFÍA MÁS GRANDE ===== */
+body {
+    font-size: 18px;
+}
+
+.logo-section p,
+.user-info,
+.stat-label,
+.form-group label,
+.form-field label,
+.form-group input,
+.form-field input,
+.form-field select,
+.form-field textarea,
+th, td,
+.btn,
+.btn-login,
+.product-card .product-name,
+.product-card .product-stock,
+.cart-item-name,
+.cart-item-price,
+.notification,
+.payment-method .name {
+    font-size: 1.08em;
+}
+
+.menu-button {
+    font-size: 22px;
+}
+
+.module-header h2 {
+    font-size: 36px;
+}
+
+.card, table {
+    font-size: 17px;
+}
+
+#btnMensajesHeader {
+    font-size: 14px !important;
+    padding: 6px 14px !important;
+}
+
+@media (max-width: 768px) {
+    body {
+        font-size: 19px;
+    }
+    .logo-section h1 { font-size: 30px !important; }
+    .logo-section p  { font-size: 16px !important; }
+    .user-info { font-size: 15px !important; }
+    .menu-button { font-size: 15px !important; }
+    .stat-label { font-size: 14px !important; }
+    .stat-value { font-size: 26px !important; }
+    .module-header h2 { font-size: 24px !important; }
+    .form-field label,
+    .form-group label { font-size: 16px !important; }
+    .form-field input,
+    .form-field select,
+    .form-field textarea,
+    .form-group input { font-size: 17px !important; }
+    th, td { font-size: 14px !important; }
+    .btn { font-size: 15px !important; }
+    .btn-login { font-size: 18px !important; }
+    .cart-item-name,
+    .cart-item-total { font-size: 16px !important; }
+    .cart-total-label { font-size: 18px !important; }
+    .cart-total-value { font-size: 24px !important; }
+    .modal-header h3 { font-size: 20px !important; }
+    .notification { font-size: 15px !important; }
+    #btnMensajesHeader { font-size: 13px !important; }
+}
+
+@media (max-width: 480px) {
+    body {
+        font-size: 18px;
+    }
+    .logo-section h1 { font-size: 26px !important; }
+    .menu-button { font-size: 14px !important; }
+    th, td { font-size: 13px !important; }
+}
+
+
+/* ===== MENSAJES: TAMAÑO IDEAL PARA CELULAR ===== */
+.mensajes-subtitulo{font-size:18px;font-weight:700;color:#6a1b9a;margin-bottom:14px;}
+.mensaje-card{background:#f8f5ff;border-radius:14px;padding:14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;}
+.mensaje-card-main{flex:1;min-width:220px;}
+.mensaje-cliente{font-weight:700;font-size:20px;color:#4a148c;line-height:1.2;}
+.mensaje-fecha{font-size:13px;color:#666;margin-top:4px;}
+.mensaje-detalle{font-size:15px;color:#333;margin-top:7px;line-height:1.4;}
+.mensaje-estado{margin-top:8px;}
+.mensaje-preview{margin-top:10px;background:white;border-radius:10px;padding:10px;border:1px solid #e0e0e0;}
+.mensaje-preview-title{font-size:13px;font-weight:700;color:#666;margin-bottom:6px;}
+.mensaje-preview-row{font-size:13px;color:#333;margin-bottom:6px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start;}
+.mensaje-actions{display:flex;gap:8px;flex-wrap:wrap;align-self:center;}
+.mensaje-actions .btn{padding:10px 14px !important;font-size:14px !important;min-height:42px;}
+.mensaje-conv-head{margin-bottom:14px;padding:14px;border-radius:12px;background:#f8f5ff;border:2px solid #d1c4e9;}
+.mensaje-conv-nombre{font-weight:700;color:#4a148c;font-size:18px;}
+.mensaje-conv-fecha{font-size:13px;color:#666;margin-top:4px;}
+.mensaje-conv-detalle{font-size:14px;color:#333;margin-top:7px;line-height:1.4;}
+.mensaje-chat-box{max-height:320px;overflow-y:auto;border:2px solid #eee;border-radius:12px;padding:12px;background:#fafafa;}
+.mensaje-bubble{max-width:85%;border-radius:12px;padding:10px 12px;}
+.mensaje-bubble-autor{font-weight:700;font-size:13px;color:#333;}
+.mensaje-bubble-texto{font-size:15px;color:#222;margin-top:4px;white-space:pre-wrap;line-height:1.4;}
+.mensaje-bubble-meta{font-size:12px;color:#777;margin-top:5px;display:flex;align-items:center;gap:6px;justify-content:flex-end;}
+#respuestaMensajePedidoTexto{font-size:16px !important;line-height:1.45;}
+@media (max-width: 768px) {
+  .mensajes-subtitulo{font-size:19px;}
+  .mensaje-card{padding:16px;gap:12px;}
+  .mensaje-card-main{min-width:100%;}
+  .mensaje-cliente{font-size:22px;}
+  .mensaje-fecha{font-size:14px;}
+  .mensaje-detalle{font-size:17px;line-height:1.5;}
+  .mensaje-preview{padding:12px;}
+  .mensaje-preview-title{font-size:14px;}
+  .mensaje-preview-row{font-size:14px;line-height:1.45;}
+  .mensaje-actions{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .mensaje-actions .btn{width:100%;font-size:15px !important;min-height:46px;}
+  .mensaje-conv-head{padding:16px;}
+  .mensaje-conv-nombre{font-size:20px;}
+  .mensaje-conv-fecha{font-size:14px;}
+  .mensaje-conv-detalle{font-size:16px;}
+  .mensaje-chat-box{padding:14px;max-height:50vh;}
+  .mensaje-bubble{max-width:92%;padding:12px 14px;}
+  .mensaje-bubble-autor{font-size:13px;}
+  .mensaje-bubble-texto{font-size:16px;}
+  .mensaje-bubble-meta{font-size:12px;}
+  #respuestaMensajePedidoTexto{font-size:17px !important;padding:14px !important;min-height:110px;}
+}
+
 </style>
     <!-- PWA: instalar como app en celular -->
     <meta name="application-name" content="Saldaña Gas">
@@ -1964,18 +2095,60 @@
             });
         }
 
-        function crearNotificacionPedido(pedido) {
-            if (!pedido || !pedido.vendedorAsignadoId) return;
+        function getUsuariosAdminIds() {
+            return Storage.getArray('usuarios').filter(u => u && u.role === 'admin').map(u => u.id);
+        }
+
+        function getDestinatariosNotificacionPedido(pedido) {
+            if (!pedido) return [];
+            const ids = new Set();
+            if (pedido.vendedorAsignadoId) ids.add(pedido.vendedorAsignadoId);
+            if (pedido.creadoPorId) ids.add(pedido.creadoPorId);
+            getUsuariosAdminIds().forEach(id => ids.add(id));
+            if (currentUser?.id) ids.delete(currentUser.id);
+            return Array.from(ids);
+        }
+
+        function crearNotificacionPedido(pedido, mensaje = 'Nuevo pedido telefónico pendiente') {
+            if (!pedido) return;
+            const destinos = getDestinatariosNotificacionPedido(pedido);
+            if (!destinos.length) return;
             const notificaciones = Storage.getArray('notificacionesPedidos');
-            notificaciones.push({
-                id: generateId(),
-                pedidoId: pedido.id,
-                paraUsuarioId: pedido.vendedorAsignadoId,
-                mensaje: 'Nuevo pedido telefónico pendiente',
-                detalle: `${pedido.clienteNombre || 'Cliente'} • ${(pedido.tipoValvula || 'normal').toUpperCase()} • ${formatCurrency(pedido.total || 0)}`,
-                leida: false,
-                estado: 'pendiente',
-                fecha: getCurrentDateTime()
+            destinos.forEach(destinoId => {
+                notificaciones.push({
+                    id: generateId(),
+                    pedidoId: pedido.id,
+                    paraUsuarioId: destinoId,
+                    mensaje,
+                    detalle: `${pedido.clienteNombre || 'Cliente'} • ${(pedido.tipoValvula || 'normal').toUpperCase()} • ${formatCurrency(pedido.total || 0)}`,
+                    leida: false,
+                    estado: pedido.estado || 'pendiente',
+                    tipo: 'pedido',
+                    fecha: getCurrentDateTime()
+                });
+            });
+            Storage.set('notificacionesPedidos', notificaciones);
+            actualizarAlertaSonoraPedidos();
+            actualizarBotonMensajesHeader();
+        }
+
+        function crearNotificacionMensajePedido(pedido, textoMensaje) {
+            if (!pedido) return;
+            const destinos = getDestinatariosNotificacionPedido(pedido);
+            if (!destinos.length) return;
+            const notificaciones = Storage.getArray('notificacionesPedidos');
+            destinos.forEach(destinoId => {
+                notificaciones.push({
+                    id: generateId(),
+                    pedidoId: pedido.id,
+                    paraUsuarioId: destinoId,
+                    mensaje: 'Nuevo mensaje',
+                    detalle: `${pedido.clienteNombre || 'Cliente'} • ${String(textoMensaje || '').slice(0, 60)}`,
+                    leida: false,
+                    estado: 'mensaje',
+                    tipo: 'mensaje',
+                    fecha: getCurrentDateTime()
+                });
             });
             Storage.set('notificacionesPedidos', notificaciones);
             actualizarAlertaSonoraPedidos();
@@ -2008,7 +2181,7 @@
             notificaciones.forEach(n => {
                 if (n.pedidoId === pedidoId) {
                     n.estado = nuevoEstado;
-                    if (nuevoEstado !== 'pendiente') n.leida = true;
+                    if (nuevoEstado !== 'pendiente' && nuevoEstado !== 'mensaje') n.leida = true;
                     cambio = true;
                 }
             });
@@ -2017,13 +2190,12 @@
             actualizarBotonMensajesHeader();
         }
 
-        let _pedidoToneTimer = null;
         let _pedidoAudioCtx = null;
 
         function contarAlertasSonorasPendientes() {
-            if (!currentUser || currentUser.role !== 'vendedor') return 0;
+            if (!currentUser) return 0;
             const notificaciones = Storage.getArray('notificacionesPedidos');
-            return notificaciones.filter(n => n.paraUsuarioId === currentUser.id && n.estado === 'pendiente').length;
+            return notificaciones.filter(n => n.paraUsuarioId === currentUser.id && !n.leida).length;
         }
 
         function reproducirTonoPedido() {
@@ -2035,44 +2207,39 @@
                     _pedidoAudioCtx.resume().catch(() => {});
                 }
                 const now = _pedidoAudioCtx.currentTime;
-                [0, 0.16].forEach((offset, i) => {
+                [
+                    { offset: 0.00, freq: 1580, dur: 0.08, gain: 0.40, type: 'square' },
+                    { offset: 0.10, freq: 1180, dur: 0.10, gain: 0.34, type: 'square' },
+                    { offset: 0.24, freq: 1760, dur: 0.14, gain: 0.44, type: 'triangle' }
+                ].forEach(step => {
                     const osc = _pedidoAudioCtx.createOscillator();
                     const gain = _pedidoAudioCtx.createGain();
-                    osc.type = 'square';
-                    osc.frequency.setValueAtTime(i === 0 ? 1250 : 980, now + offset);
-                    gain.gain.setValueAtTime(0.0001, now + offset);
-                    gain.gain.exponentialRampToValueAtTime(0.28, now + offset + 0.01);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.10);
+                    osc.type = step.type;
+                    osc.frequency.setValueAtTime(step.freq, now + step.offset);
+                    gain.gain.setValueAtTime(0.0001, now + step.offset);
+                    gain.gain.exponentialRampToValueAtTime(step.gain, now + step.offset + 0.01);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + step.offset + step.dur);
                     osc.connect(gain);
                     gain.connect(_pedidoAudioCtx.destination);
-                    osc.start(now + offset);
-                    osc.stop(now + offset + 0.11);
+                    osc.start(now + step.offset);
+                    osc.stop(now + step.offset + step.dur + 0.01);
                 });
             } catch (e) {}
         }
 
-        function detenerAlertaSonoraPedidos() {
-            if (_pedidoToneTimer) {
-                clearInterval(_pedidoToneTimer);
-                _pedidoToneTimer = null;
-            }
-        }
+        function detenerAlertaSonoraPedidos() { return; }
 
         function actualizarAlertaSonoraPedidos() {
-            const pendientes = contarAlertasSonorasPendientes();
-            if (pendientes > 0) {
+            if (!currentUser) return;
+            const key = 'alertedNotificaciones_' + currentUser.id;
+            const cache = JSON.parse(localStorage.getItem(key) || '[]');
+            const yaAlertadas = new Set(Array.isArray(cache) ? cache : []);
+            const notificaciones = Storage.getArray('notificacionesPedidos').filter(n => n.paraUsuarioId === currentUser.id && !n.leida);
+            const nuevas = notificaciones.filter(n => !yaAlertadas.has(n.id));
+            if (nuevas.length) {
                 reproducirTonoPedido();
-                if (!_pedidoToneTimer) {
-                    _pedidoToneTimer = setInterval(() => {
-                        if (contarAlertasSonorasPendientes() > 0) {
-                            reproducirTonoPedido();
-                        } else {
-                            detenerAlertaSonoraPedidos();
-                        }
-                    }, 2400);
-                }
-            } else {
-                detenerAlertaSonoraPedidos();
+                nuevas.forEach(n => yaAlertadas.add(n.id));
+                localStorage.setItem(key, JSON.stringify(Array.from(yaAlertadas).slice(-300)));
             }
         }
 
@@ -10686,9 +10853,77 @@
                 autorNombre: pedido.usuario || 'Sistema',
                 autorRole: pedido.creadoPorRole || currentUser?.role || '',
                 texto: `Pedido creado para ${pedido.vendedorAsignadoNombre || 'vendedor'}: ${pedido.clienteNombre || 'Cliente'} • ${formatCurrency(pedido.total || 0)}`,
-                fecha: pedido.fecha || getCurrentDateTime()
+                fecha: pedido.fecha || getCurrentDateTime(),
+                destinatarioIds: getDestinatariosMensajePedido(pedido),
+                estadoMensaje: 'enviado',
+                entregadoPorIds: [],
+                vistoPorIds: []
             });
             setMensajesPedidosStore(mensajes);
+        }
+
+        function getDestinatariosMensajePedido(pedido) {
+            if (!pedido) return [];
+            const ids = new Set();
+            if (pedido.vendedorAsignadoId) ids.add(pedido.vendedorAsignadoId);
+            if (pedido.creadoPorId) ids.add(pedido.creadoPorId);
+            getUsuariosAdminIds().forEach(id => ids.add(id));
+            if (currentUser?.id) ids.delete(currentUser.id);
+            return Array.from(ids);
+        }
+
+        function iconoEstadoMensaje(estado) {
+            if (estado === 'visto') return '<span style="color:#34b7f1;font-weight:700;">✓✓</span>';
+            if (estado === 'entregado') return '<span style="color:#8696a0;font-weight:700;">✓✓</span>';
+            return '<span style="color:#8696a0;font-weight:700;">✓</span>';
+        }
+
+        function getEstadoMensajeParaVista(mensaje) {
+            if (!mensaje) return 'enviado';
+            if (Array.isArray(mensaje.vistoPorIds) && mensaje.vistoPorIds.length) return 'visto';
+            if (Array.isArray(mensaje.entregadoPorIds) && mensaje.entregadoPorIds.length) return 'entregado';
+            return mensaje.estadoMensaje || 'enviado';
+        }
+
+        function marcarMensajesPedidoComoEntregados(pedidoId) {
+            if (!currentUser) return;
+            const mensajes = getMensajesPedidosStore();
+            let cambio = false;
+            mensajes.forEach(m => {
+                if (m.pedidoId !== pedidoId) return;
+                if (m.autorId === currentUser.id) return;
+                if (!Array.isArray(m.destinatarioIds) || !m.destinatarioIds.includes(currentUser.id)) return;
+                m.entregadoPorIds = Array.isArray(m.entregadoPorIds) ? m.entregadoPorIds : [];
+                if (!m.entregadoPorIds.includes(currentUser.id)) {
+                    m.entregadoPorIds.push(currentUser.id);
+                    if ((m.estadoMensaje || 'enviado') === 'enviado') m.estadoMensaje = 'entregado';
+                    cambio = true;
+                }
+            });
+            if (cambio) setMensajesPedidosStore(mensajes);
+        }
+
+        function marcarMensajesPedidoComoVistos(pedidoId) {
+            if (!currentUser) return;
+            const mensajes = getMensajesPedidosStore();
+            let cambio = false;
+            mensajes.forEach(m => {
+                if (m.pedidoId !== pedidoId) return;
+                if (m.autorId === currentUser.id) return;
+                if (!Array.isArray(m.destinatarioIds) || !m.destinatarioIds.includes(currentUser.id)) return;
+                m.entregadoPorIds = Array.isArray(m.entregadoPorIds) ? m.entregadoPorIds : [];
+                m.vistoPorIds = Array.isArray(m.vistoPorIds) ? m.vistoPorIds : [];
+                if (!m.entregadoPorIds.includes(currentUser.id)) {
+                    m.entregadoPorIds.push(currentUser.id);
+                    cambio = true;
+                }
+                if (!m.vistoPorIds.includes(currentUser.id)) {
+                    m.vistoPorIds.push(currentUser.id);
+                    m.estadoMensaje = 'visto';
+                    cambio = true;
+                }
+            });
+            if (cambio) setMensajesPedidosStore(mensajes);
         }
 
         function agregarMensajePedido(pedidoId, texto, tipo = 'mensaje') {
@@ -10697,6 +10932,7 @@
             const contenido = String(texto || '').trim();
             if (!contenido) return false;
             const mensajes = getMensajesPedidosStore();
+            const destinatarioIds = getDestinatariosMensajePedido(pedido);
             mensajes.push({
                 id: generateId(),
                 pedidoId,
@@ -10705,9 +10941,14 @@
                 autorNombre: currentUser?.nombre || 'Usuario',
                 autorRole: currentUser?.role || '',
                 texto: contenido,
-                fecha: getCurrentDateTime()
+                fecha: getCurrentDateTime(),
+                destinatarioIds,
+                estadoMensaje: 'enviado',
+                entregadoPorIds: [],
+                vistoPorIds: []
             });
             setMensajesPedidosStore(mensajes);
+            if (tipo !== 'sistema') crearNotificacionMensajePedido(pedido, contenido);
             return true;
         }
 
@@ -10737,27 +10978,30 @@
                 showNotification('No puedes responder este mensaje', 'error');
                 return;
             }
+            marcarMensajesPedidoComoEntregados(id);
+            marcarMensajesPedidoComoVistos(id);
+            marcarNotificacionLeidaPorPedido(id);
             const historial = getConversacionPedido(id);
             const html = `
-                <div style="margin-bottom:14px;padding:12px;border-radius:12px;background:#f8f5ff;border:2px solid #d1c4e9;">
-                    <div style="font-weight:700;color:#4a148c;">${pedido.clienteNombre || 'Cliente'}</div>
-                    <div style="font-size:12px;color:#666;margin-top:4px;">${pedido.fecha || ''}</div>
-                    <div style="font-size:13px;color:#333;margin-top:6px;">📍 ${pedido.clienteDireccion || 'Sin dirección'}${pedido.clienteTelefono ? ' | ☎️ ' + pedido.clienteTelefono : ''}</div>
+                <div class="mensaje-conv-head">
+                    <div class="mensaje-conv-nombre">${pedido.clienteNombre || 'Cliente'}</div>
+                    <div class="mensaje-conv-fecha">${pedido.fecha || ''}</div>
+                    <div class="mensaje-conv-detalle">📍 ${pedido.clienteDireccion || 'Sin dirección'}${pedido.clienteTelefono ? ' | ☎️ ' + pedido.clienteTelefono : ''}</div>
                 </div>
-                <div style="max-height:320px;overflow-y:auto;border:2px solid #eee;border-radius:12px;padding:12px;background:#fafafa;">
+                <div class="mensaje-chat-box">
                     ${historial.length ? historial.map(m => `
                         <div style="margin-bottom:10px;display:flex;justify-content:${m.autorId === currentUser?.id ? 'flex-end' : 'flex-start'};">
-                            <div style="max-width:85%;background:${m.autorId === currentUser?.id ? '#e8f5e9' : '#f3e5f5'};border:2px solid ${m.autorId === currentUser?.id ? '#a5d6a7' : '#ce93d8'};border-radius:12px;padding:10px 12px;">
-                                <div style="font-weight:700;font-size:12px;color:#333;">${m.autorNombre || 'Usuario'} ${m.autorRole ? '• ' + String(m.autorRole).toUpperCase() : ''}</div>
-                                <div style="font-size:14px;color:#222;margin-top:4px;white-space:pre-wrap;">${m.texto || ''}</div>
-                                <div style="font-size:11px;color:#777;margin-top:4px;">${m.fecha || ''}</div>
+                            <div class="mensaje-bubble" style="background:${m.autorId === currentUser?.id ? '#e8f5e9' : '#f3e5f5'};border:2px solid ${m.autorId === currentUser?.id ? '#a5d6a7' : '#ce93d8'};">
+                                <div class="mensaje-bubble-autor">${m.autorNombre || 'Usuario'} ${m.autorRole ? '• ' + String(m.autorRole).toUpperCase() : ''}</div>
+                                <div class="mensaje-bubble-texto">${m.texto || ''}</div>
+                                <div class="mensaje-bubble-meta">${m.fecha || ''}${m.autorId === currentUser?.id ? iconoEstadoMensaje(getEstadoMensajeParaVista(m)) : ''}</div>
                             </div>
                         </div>
                     `).join('') : '<div style="text-align:center;color:#999;">Sin mensajes aún</div>'}
                 </div>
                 <div class="form-field" style="margin-top:14px;">
                     <label>Responder:</label>
-                    <textarea id="respuestaMensajePedidoTexto" rows="4" placeholder="Escribe tu respuesta..." style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;font-family:Rajdhani,sans-serif;"></textarea>
+                    <textarea id="respuestaMensajePedidoTexto" rows="4" placeholder="Escribe tu respuesta..." style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-family:Rajdhani,sans-serif;"></textarea>
                 </div>
                 <div class="flex gap-2 mt-4">
                     <button onclick="enviarRespuestaMensajePedido(${id})" class="btn btn-primary" style="flex:1;">Enviar respuesta</button>
@@ -10788,33 +11032,34 @@
         function renderMensajes() {
             const pedidos = getPedidosMensajes();
             pedidos.forEach(asegurarConversacionPedido);
+            pedidos.forEach(p => marcarMensajesPedidoComoEntregados(p.id));
             const content = `
                 <div class="module-header">
                     <h2>💬 MENSAJES</h2>
                     <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
                 </div>
                 <div class="card">
-                    <div style="margin-bottom:14px;font-size:16px;font-weight:700;color:#6a1b9a;">Bandeja de mensajes y pedidos telefónicos</div>
+                    <div class="mensajes-subtitulo">Bandeja de mensajes y pedidos telefónicos</div>
                     ${pedidos.length ? `
                         <div style="display:grid;gap:12px;">
                             ${pedidos.map(p => {
                                 const ultimos = getConversacionPedido(p.id).slice(-2);
                                 return `
-                                <div style="background:#f8f5ff;border:2px solid ${p.estado === 'pendiente' ? '#b39ddb' : '#d7ccc8'};border-radius:14px;padding:14px;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap;">
-                                    <div style="flex:1;min-width:220px;">
-                                        <div style="font-weight:700;font-size:18px;color:#4a148c;">${p.clienteNombre || 'Cliente sin nombre'}</div>
-                                        <div style="font-size:12px;color:#666;margin-top:2px;">${p.fecha || ''}</div>
-                                        <div style="font-size:13px;color:#333;margin-top:6px;">📍 ${p.clienteDireccion || 'Sin dirección'}${p.clienteTelefono ? ' | ☎️ ' + p.clienteTelefono : ''}</div>
-                                        <div style="font-size:13px;color:#333;margin-top:4px;">💰 Precio sugerido: ${formatCurrency(p.total || 0)}</div>
-                                        <div style="font-size:13px;color:#333;margin-top:4px;">🔧 Válvula: ${(p.tipoValvula || 'normal').toUpperCase()}</div>
-                                        <div style="font-size:13px;color:#555;margin-top:4px;">${(p.items||[]).map(i => `${i.nombre} x${i.cantidad}`).join(', ') || 'Sin productos'}</div>
-                                        <div style="margin-top:6px;"><span style="padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : '#e8f5e9'};color:${p.estado === 'pendiente' ? '#e65100' : p.estado === 'aceptado' ? '#1565c0' : '#2d5016'};">${String(p.estado || 'pendiente').toUpperCase()}</span></div>
-                                        ${ultimos.length ? `<div style="margin-top:10px;background:white;border-radius:10px;padding:10px;border:1px solid #e0e0e0;">
-                                            <div style="font-size:12px;font-weight:700;color:#666;margin-bottom:6px;">Últimos mensajes</div>
-                                            ${ultimos.map(m => `<div style="font-size:12px;color:#333;margin-bottom:6px;"><strong>${m.autorNombre}:</strong> ${m.texto}</div>`).join('')}
+                                <div class="mensaje-card" style="border:2px solid ${p.estado === 'pendiente' ? '#b39ddb' : '#d7ccc8'};">
+                                    <div class="mensaje-card-main">
+                                        <div class="mensaje-cliente">${p.clienteNombre || 'Cliente sin nombre'}</div>
+                                        <div class="mensaje-fecha">${p.fecha || ''}</div>
+                                        <div class="mensaje-detalle">📍 ${p.clienteDireccion || 'Sin dirección'}${p.clienteTelefono ? ' | ☎️ ' + p.clienteTelefono : ''}</div>
+                                        <div class="mensaje-detalle">💰 Precio sugerido: ${formatCurrency(p.total || 0)}</div>
+                                        <div class="mensaje-detalle">🔧 Válvula: ${(p.tipoValvula || 'normal').toUpperCase()}</div>
+                                        <div class="mensaje-detalle" style="color:#555;">${(p.items||[]).map(i => `${i.nombre} x${i.cantidad}`).join(', ') || 'Sin productos'}</div>
+                                        <div class="mensaje-estado"><span style="padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : '#e8f5e9'};color:${p.estado === 'pendiente' ? '#e65100' : p.estado === 'aceptado' ? '#1565c0' : '#2d5016'};">${String(p.estado || 'pendiente').toUpperCase()}</span></div>
+                                        ${ultimos.length ? `<div class="mensaje-preview">
+                                            <div class="mensaje-preview-title">Últimos mensajes</div>
+                                            ${ultimos.map(m => `<div class="mensaje-preview-row"><span><strong>${m.autorNombre}:</strong> ${m.texto}</span><span>${m.autorId === currentUser?.id ? iconoEstadoMensaje(getEstadoMensajeParaVista(m)) : ''}</span></div>`).join('')}
                                         </div>` : ''}
                                     </div>
-                                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:center;">
+                                    <div class="mensaje-actions">
                                         ${(currentUser?.role === 'admin' || p.vendedorAsignadoId === currentUser?.id) && p.estado === 'pendiente' ? `<button onclick="irAPedidoRecepcionista(${p.id})" class="btn btn-primary" style="padding:8px 12px;font-size:12px;">📥 Ir a pedido</button>` : ''}
                                         <button onclick="abrirRespuestaMensajePedido(${p.id})" class="btn btn-warning" style="padding:8px 12px;font-size:12px;">💬 Responder</button>
                                         <button onclick="verDetallePedido(${p.id})" class="btn btn-info" style="padding:8px 12px;font-size:12px;">👁 Ver</button>
