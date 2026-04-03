@@ -1037,6 +1037,58 @@ th, td,
   #respuestaMensajePedidoTexto{font-size:17px !important;padding:14px !important;min-height:110px;}
 }
 
+
+/* ===== MENSAJES TIPO CHAT ===== */
+.mensaje-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:2px solid #e1bee7;border-radius:14px;background:linear-gradient(135deg,#f3e5f5,#ede7f6);margin-bottom:12px;}
+.mensaje-topbar-nombre{font-size:20px;font-weight:700;color:#4a148c;line-height:1.15;}
+.mensaje-topbar-sub{font-size:13px;color:#6a1b9a;font-weight:700;margin-top:2px;}
+.mensaje-chat-box{max-height:48vh;overflow-y:auto;border:2px solid #eee;border-radius:14px;padding:12px;background:#fafafa;}
+.mensaje-composer{display:flex;align-items:center;gap:8px;margin-top:12px;}
+.mensaje-composer-btn{border:none;border-radius:999px;min-width:44px;height:44px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+.mensaje-composer-plus{background:#ede7f6;color:#6a1b9a;}
+.mensaje-composer-send{background:#6a1b9a;color:#fff;}
+.mensaje-composer textarea{flex:1;min-height:44px;max-height:120px;padding:11px 14px;border:2px solid #d1c4e9;border-radius:22px;font-size:17px;font-family:Rajdhani,sans-serif;resize:none;background:#fff;}
+.mensaje-chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media (max-width: 768px){
+  .mensaje-topbar{padding:12px;}
+  .mensaje-topbar-nombre{font-size:19px;}
+  .mensaje-topbar-sub{font-size:13px;}
+  .mensaje-chat-box{max-height:52vh;padding:12px;}
+  .mensaje-composer{gap:7px;position:sticky;bottom:0;background:#fff;padding-top:8px;}
+  .mensaje-composer-btn{min-width:46px;height:46px;font-size:23px;}
+  .mensaje-composer textarea{font-size:18px;min-height:46px;}
+}
+
+
+/* ===== MENSAJES LISTA + CHAT TIPO WHATSAPP ===== */
+.mensajes-layout{display:grid;gap:14px;}
+.mensajes-lista{display:grid;gap:12px;}
+.mensaje-list-item{background:#fff;border:2px solid #e6def6;border-radius:18px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;transition:all .2s ease;}
+.mensaje-list-item:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(0,0,0,.08);}
+.mensaje-list-item-main{flex:1;min-width:0;}
+.mensaje-list-nombre{font-size:22px;font-weight:700;color:#2d2d2d;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mensaje-list-sub{font-size:16px;color:#555;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mensaje-list-right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:76px;}
+.mensaje-list-fecha{font-size:14px;color:#666;font-weight:700;}
+.mensaje-list-badge{background:#25D366;color:#fff;border-radius:999px;min-width:28px;height:28px;padding:0 8px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.mensaje-list-open{font-size:12px;font-weight:700;color:#2d5016;background:#e8f5e9;border:1px solid #a5d6a7;padding:4px 8px;border-radius:999px;}
+.mensaje-chat-modal{padding:0 !important;overflow:hidden !important;}
+.mensaje-chat-modal-header{position:sticky;top:0;z-index:5;background:#fff;border-bottom:2px solid #ede7f6;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.mensaje-chat-modal-title{font-size:28px;font-weight:700;color:#2d5016;line-height:1.1;}
+.mensaje-chat-modal-sub{font-size:14px;font-weight:700;color:#6a1b9a;margin-top:3px;}
+.mensaje-chat-modal-body{padding:16px 18px 18px;}
+.mensaje-topbar{position:sticky;top:0;z-index:3;}
+@media (max-width:768px){
+  .mensajes-lista{gap:10px;}
+  .mensaje-list-item{padding:14px 12px;border-radius:16px;}
+  .mensaje-list-nombre{font-size:20px;}
+  .mensaje-list-sub{font-size:15px;}
+  .mensaje-list-fecha{font-size:13px;}
+  .mensaje-chat-modal-header{padding:12px 14px;}
+  .mensaje-chat-modal-title{font-size:24px;}
+  .mensaje-chat-modal-body{padding:12px;}
+}
+
 </style>
     <!-- PWA: instalar como app en celular -->
     <meta name="application-name" content="Saldaña Gas">
@@ -1330,6 +1382,28 @@ th, td,
   background:#fff8e1;
   color:#e65100;
   border:2px solid #ffcc80;
+}
+
+
+/* ===== MENSAJES TIPO CHAT ===== */
+.mensaje-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:2px solid #e1bee7;border-radius:14px;background:linear-gradient(135deg,#f3e5f5,#ede7f6);margin-bottom:12px;}
+.mensaje-topbar-nombre{font-size:20px;font-weight:700;color:#4a148c;line-height:1.15;}
+.mensaje-topbar-sub{font-size:13px;color:#6a1b9a;font-weight:700;margin-top:2px;}
+.mensaje-chat-box{max-height:48vh;overflow-y:auto;border:2px solid #eee;border-radius:14px;padding:12px;background:#fafafa;}
+.mensaje-composer{display:flex;align-items:center;gap:8px;margin-top:12px;}
+.mensaje-composer-btn{border:none;border-radius:999px;min-width:44px;height:44px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+.mensaje-composer-plus{background:#ede7f6;color:#6a1b9a;}
+.mensaje-composer-send{background:#6a1b9a;color:#fff;}
+.mensaje-composer textarea{flex:1;min-height:44px;max-height:120px;padding:11px 14px;border:2px solid #d1c4e9;border-radius:22px;font-size:17px;font-family:Rajdhani,sans-serif;resize:none;background:#fff;}
+.mensaje-chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media (max-width: 768px){
+  .mensaje-topbar{padding:12px;}
+  .mensaje-topbar-nombre{font-size:19px;}
+  .mensaje-topbar-sub{font-size:13px;}
+  .mensaje-chat-box{max-height:52vh;padding:12px;}
+  .mensaje-composer{gap:7px;position:sticky;bottom:0;background:#fff;padding-top:8px;}
+  .mensaje-composer-btn{min-width:46px;height:46px;font-size:23px;}
+  .mensaje-composer textarea{font-size:18px;min-height:46px;}
 }
 
 </style>
@@ -3286,8 +3360,12 @@ th, td,
                 respaldos:    '💾 RESPALDOS',
             };
             const order = Object.keys(etiquetas);
-            grid.innerHTML = order
-                .filter(mod => canAccess(mod))
+            const visibles = order.filter(mod => canAccess(mod));
+            if (visibles.includes('mensajes')) {
+                visibles.splice(visibles.indexOf('mensajes'), 1);
+                visibles.unshift('mensajes');
+            }
+            grid.innerHTML = visibles
                 .map(mod => `<div class="menu-button" data-module="${mod}" onclick="showModule('${mod}')">${etiquetas[mod]}</div>`)
                 .join('');
             // Admin: mostrar panel de supervisión
@@ -3421,7 +3499,7 @@ th, td,
                     renderNuevoPedido();
                     break;
                 case 'mensajes':
-                    renderMensajes();
+                    safeRenderMensajes();
                     break;
                 case 'pedidos':
                     renderPedidos();
@@ -3493,6 +3571,29 @@ th, td,
             }
         }
 
+
+        function safeRenderMensajes() {
+            try {
+                renderMensajes();
+            } catch (error) {
+                console.error('Error abriendo Mensajes:', error);
+                const content = document.getElementById('moduleContent');
+                if (content) {
+                    content.innerHTML = `
+                        <div class="module-header">
+                            <h2>💬 MENSAJES</h2>
+                            <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
+                        </div>
+                        <div class="card">
+                            <div style="font-size:18px;font-weight:700;color:#6a1b9a;margin-bottom:10px;">Bandeja de mensajes</div>
+                            <div style="color:#555;margin-bottom:16px;">Hubo un problema abriendo este módulo. Ya quedó con protección para que no vuelva a desaparecer.</div>
+                            <button onclick="renderMensajes()" class="btn btn-primary">🔄 Reintentar abrir mensajes</button>
+                        </div>`;
+                }
+                showNotification('Se corrigió la apertura de Mensajes. Intenta de nuevo.','info');
+            }
+        }
+
         function backToMenu() {
             _activeModule = null;
             _adminViewingUser = null;
@@ -3507,6 +3608,7 @@ th, td,
         // ==================== MÓDULO: NUEVO PEDIDO ====================
         let carritoActual = [];
         let _pedidoRecepcionistaActivoId = null;
+        let _mensajeNuevoPedidoBase = null;
         let pagosActuales = {
             efectivo: 0,
             yape: 0,
@@ -3960,6 +4062,18 @@ th, td,
             autoSelectTrabajador();
             if (pedidoActivoRecepcionista) {
                 aplicarPedidoRecepcionistaEnFormulario(pedidoActivoRecepcionista);
+                seleccionarCliente();
+            }
+            if (_mensajeNuevoPedidoBase) {
+                const nombre = document.getElementById('clienteNombre');
+                const telefono = document.getElementById('clienteTelefono');
+                const direccion = document.getElementById('clienteDireccion');
+                const valvula = document.getElementById('pedidoTipoValvula');
+                if (nombre) nombre.value = _mensajeNuevoPedidoBase.clienteNombre || '';
+                if (telefono) telefono.value = _mensajeNuevoPedidoBase.clienteTelefono || '';
+                if (direccion) direccion.value = _mensajeNuevoPedidoBase.clienteDireccion || '';
+                if (valvula && _mensajeNuevoPedidoBase.tipoValvula) valvula.value = _mensajeNuevoPedidoBase.tipoValvula;
+                _mensajeNuevoPedidoBase = null;
                 seleccionarCliente();
             }
         }
@@ -6151,6 +6265,28 @@ th, td,
   background:#fff8e1;
   color:#e65100;
   border:2px solid #ffcc80;
+}
+
+
+/* ===== MENSAJES TIPO CHAT ===== */
+.mensaje-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:2px solid #e1bee7;border-radius:14px;background:linear-gradient(135deg,#f3e5f5,#ede7f6);margin-bottom:12px;}
+.mensaje-topbar-nombre{font-size:20px;font-weight:700;color:#4a148c;line-height:1.15;}
+.mensaje-topbar-sub{font-size:13px;color:#6a1b9a;font-weight:700;margin-top:2px;}
+.mensaje-chat-box{max-height:48vh;overflow-y:auto;border:2px solid #eee;border-radius:14px;padding:12px;background:#fafafa;}
+.mensaje-composer{display:flex;align-items:center;gap:8px;margin-top:12px;}
+.mensaje-composer-btn{border:none;border-radius:999px;min-width:44px;height:44px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+.mensaje-composer-plus{background:#ede7f6;color:#6a1b9a;}
+.mensaje-composer-send{background:#6a1b9a;color:#fff;}
+.mensaje-composer textarea{flex:1;min-height:44px;max-height:120px;padding:11px 14px;border:2px solid #d1c4e9;border-radius:22px;font-size:17px;font-family:Rajdhani,sans-serif;resize:none;background:#fff;}
+.mensaje-chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media (max-width: 768px){
+  .mensaje-topbar{padding:12px;}
+  .mensaje-topbar-nombre{font-size:19px;}
+  .mensaje-topbar-sub{font-size:13px;}
+  .mensaje-chat-box{max-height:52vh;padding:12px;}
+  .mensaje-composer{gap:7px;position:sticky;bottom:0;background:#fff;padding-top:8px;}
+  .mensaje-composer-btn{min-width:46px;height:46px;font-size:23px;}
+  .mensaje-composer textarea{font-size:18px;min-height:46px;}
 }
 
 </style>
@@ -9876,6 +10012,28 @@ th, td,
   border:2px solid #ffcc80;
 }
 
+
+/* ===== MENSAJES TIPO CHAT ===== */
+.mensaje-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:2px solid #e1bee7;border-radius:14px;background:linear-gradient(135deg,#f3e5f5,#ede7f6);margin-bottom:12px;}
+.mensaje-topbar-nombre{font-size:20px;font-weight:700;color:#4a148c;line-height:1.15;}
+.mensaje-topbar-sub{font-size:13px;color:#6a1b9a;font-weight:700;margin-top:2px;}
+.mensaje-chat-box{max-height:48vh;overflow-y:auto;border:2px solid #eee;border-radius:14px;padding:12px;background:#fafafa;}
+.mensaje-composer{display:flex;align-items:center;gap:8px;margin-top:12px;}
+.mensaje-composer-btn{border:none;border-radius:999px;min-width:44px;height:44px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+.mensaje-composer-plus{background:#ede7f6;color:#6a1b9a;}
+.mensaje-composer-send{background:#6a1b9a;color:#fff;}
+.mensaje-composer textarea{flex:1;min-height:44px;max-height:120px;padding:11px 14px;border:2px solid #d1c4e9;border-radius:22px;font-size:17px;font-family:Rajdhani,sans-serif;resize:none;background:#fff;}
+.mensaje-chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media (max-width: 768px){
+  .mensaje-topbar{padding:12px;}
+  .mensaje-topbar-nombre{font-size:19px;}
+  .mensaje-topbar-sub{font-size:13px;}
+  .mensaje-chat-box{max-height:52vh;padding:12px;}
+  .mensaje-composer{gap:7px;position:sticky;bottom:0;background:#fff;padding-top:8px;}
+  .mensaje-composer-btn{min-width:46px;height:46px;font-size:23px;}
+  .mensaje-composer textarea{font-size:18px;min-height:46px;}
+}
+
 </style>
             <div class="cc2">
 
@@ -10956,7 +11114,7 @@ th, td,
             const btn = document.getElementById('btnMensajesHeader');
             const contador = document.getElementById('contadorMensajesHeader');
             if (!btn || !contador || !currentUser) return;
-            btn.style.display = 'inline-flex';
+            btn.style.display = canAccess('mensajes') ? 'inline-flex' : 'none';
             btn.style.alignItems = 'center';
             const total = getPedidosMensajes().filter(p => p.estado === 'pendiente').length + contarNotificacionesPendientes();
             contador.textContent = total;
@@ -10972,6 +11130,121 @@ th, td,
             }).sort((a,b) => String(b.fecha||'').localeCompare(String(a.fecha||'')));
         }
 
+        function usuarioTieneCajaAbierta(usuarioId) {
+            if (!usuarioId) return false;
+            const caja = Storage.get('caja_u' + usuarioId) || {};
+            return !!caja && !Array.isArray(caja) && caja.estado === 'abierta';
+        }
+
+        function contarMensajesNoLeidosPedido(pedidoId) {
+            return getConversacionPedido(pedidoId).filter(m =>
+                m && m.autorId !== currentUser?.id &&
+                Array.isArray(m.destinatarioIds) && m.destinatarioIds.includes(currentUser?.id) &&
+                !(Array.isArray(m.vistoPorIds) && m.vistoPorIds.includes(currentUser?.id))
+            ).length;
+        }
+
+        function getResumenUsuariosMensajes() {
+            const pedidos = getPedidosMensajes();
+            const mapa = new Map();
+            pedidos.forEach(p => {
+                const historial = getConversacionPedido(p.id);
+                const ultimoMensaje = historial.length ? historial[historial.length - 1] : null;
+                let usuarioId = null;
+                let nombre = '';
+                let rol = '';
+                if (currentUser?.role === 'recepcionista') {
+                    usuarioId = p.vendedorAsignadoId || null;
+                    nombre = p.vendedorAsignadoNombre || 'Vendedor';
+                    rol = 'VENDEDOR';
+                } else {
+                    usuarioId = p.creadoPorId || p.usuarioId || null;
+                    nombre = p.usuario || 'Recepcionista';
+                    rol = (p.creadoPorRole || 'recepcionista').toUpperCase();
+                }
+                const existente = mapa.get(usuarioId || ('sin_' + nombre));
+                const item = {
+                    key: usuarioId || ('sin_' + nombre),
+                    usuarioId,
+                    nombre,
+                    rol,
+                    cajaAbierta: usuarioTieneCajaAbierta(usuarioId),
+                    pedidoId: p.id,
+                    pedido: p,
+                    fecha: (ultimoMensaje && ultimoMensaje.fecha) || p.fecha || '',
+                    preview: (ultimoMensaje && ultimoMensaje.texto) || `Pedido: ${p.clienteNombre || 'Cliente'} • ${formatCurrency(p.total || 0)}`,
+                    noLeidos: contarMensajesNoLeidosPedido(p.id)
+                };
+                if (!existente) {
+                    mapa.set(item.key, item);
+                } else {
+                    existente.noLeidos += item.noLeidos;
+                    if (String(item.fecha || '') > String(existente.fecha || '')) {
+                        item.noLeidos = existente.noLeidos;
+                        mapa.set(item.key, item);
+                    }
+                }
+            });
+            return Array.from(mapa.values()).sort((a,b) => {
+                if ((b.cajaAbierta?1:0) !== (a.cajaAbierta?1:0)) return (b.cajaAbierta?1:0) - (a.cajaAbierta?1:0);
+                return String(b.fecha||'').localeCompare(String(a.fecha||''));
+            });
+        }
+
+        function abrirChatUsuarioMensajes(pedidoId) {
+            abrirRespuestaMensajePedido(pedidoId);
+        }
+
+        function obtenerDestinoChatPedido(pedido) {
+            if (!pedido) return { nombre: 'Chat', subtitulo: '' };
+            if (currentUser?.role === 'recepcionista') {
+                return { nombre: pedido.vendedorAsignadoNombre || 'Vendedor', subtitulo: 'Usuario destino del pedido' };
+            }
+            const historial = getConversacionPedido(pedido.id || 0);
+            const otro = historial.slice().reverse().find(m => m && m.autorId !== currentUser?.id);
+            return {
+                nombre: (otro && otro.autorNombre) || pedido.usuario || 'Recepcionista',
+                subtitulo: (otro && otro.autorRole) ? String(otro.autorRole).toUpperCase() : 'Conversación del pedido'
+            };
+        }
+
+        function abrirNuevoPedidoDesdeMensajes(id) {
+            const pedido = Storage.getArray('pedidos').find(p => p.id === id);
+            _pedidoRecepcionistaActivoId = null;
+            _mensajeNuevoPedidoBase = pedido ? {
+                clienteNombre: pedido.clienteNombre || '',
+                clienteTelefono: pedido.clienteTelefono || '',
+                clienteDireccion: pedido.clienteDireccion || '',
+                tipoValvula: pedido.tipoValvula || 'normal'
+            } : null;
+            cerrarModal('modalResponderMensajePedido');
+            showModule('nuevoPedido');
+            setTimeout(() => {
+                const nombre = document.getElementById('clienteNombre');
+                if (nombre && _mensajeNuevoPedidoBase?.clienteNombre) {
+                    nombre.value = _mensajeNuevoPedidoBase.clienteNombre;
+                }
+                const telefono = document.getElementById('clienteTelefono');
+                if (telefono && _mensajeNuevoPedidoBase?.clienteTelefono) telefono.value = _mensajeNuevoPedidoBase.clienteTelefono;
+                const direccion = document.getElementById('clienteDireccion');
+                if (direccion && _mensajeNuevoPedidoBase?.clienteDireccion) direccion.value = _mensajeNuevoPedidoBase.clienteDireccion;
+                const valvula = document.getElementById('pedidoTipoValvula');
+                if (valvula && _mensajeNuevoPedidoBase?.tipoValvula) valvula.value = _mensajeNuevoPedidoBase.tipoValvula;
+                if (nombre) nombre.focus();
+            }, 80);
+        }
+
+        function abrirNuevoPedidoGeneralDesdeMensajes() {
+            _pedidoRecepcionistaActivoId = null;
+            _mensajeNuevoPedidoBase = null;
+            cerrarModal('modalResponderMensajePedido');
+            showModule('nuevoPedido');
+            setTimeout(() => {
+                const nombre = document.getElementById('clienteNombre');
+                if (nombre) nombre.focus();
+            }, 80);
+        }
+
         function abrirRespuestaMensajePedido(id) {
             const pedido = Storage.getArray('pedidos').find(p => p.id === id);
             if (!pedido || !pedidoEsRelacionadoConUsuario(pedido)) {
@@ -10982,16 +11255,24 @@ th, td,
             marcarMensajesPedidoComoVistos(id);
             marcarNotificacionLeidaPorPedido(id);
             const historial = getConversacionPedido(id);
+            const destino = obtenerDestinoChatPedido(pedido);
             const html = `
+                <div class="mensaje-topbar">
+                    <div>
+                        <div class="mensaje-topbar-nombre">${destino.nombre || 'Chat'}</div>
+                        <div class="mensaje-topbar-sub">${destino.subtitulo || ''}</div>
+                    </div>
+                    <button onclick="verDetallePedido(${id})" class="btn btn-info" style="padding:8px 12px;font-size:13px;">👁 Ver pedido</button>
+                </div>
                 <div class="mensaje-conv-head">
                     <div class="mensaje-conv-nombre">${pedido.clienteNombre || 'Cliente'}</div>
                     <div class="mensaje-conv-fecha">${pedido.fecha || ''}</div>
                     <div class="mensaje-conv-detalle">📍 ${pedido.clienteDireccion || 'Sin dirección'}${pedido.clienteTelefono ? ' | ☎️ ' + pedido.clienteTelefono : ''}</div>
                 </div>
-                <div class="mensaje-chat-box">
+                <div class="mensaje-chat-box" id="mensajeChatBox">
                     ${historial.length ? historial.map(m => `
                         <div style="margin-bottom:10px;display:flex;justify-content:${m.autorId === currentUser?.id ? 'flex-end' : 'flex-start'};">
-                            <div class="mensaje-bubble" style="background:${m.autorId === currentUser?.id ? '#e8f5e9' : '#f3e5f5'};border:2px solid ${m.autorId === currentUser?.id ? '#a5d6a7' : '#ce93d8'};">
+                            <div class="mensaje-bubble" style="background:${m.autorId === currentUser?.id ? '#e8f5e9' : '#f3e5f5'};border:2px solid ${m.autorId === currentUser?.id ? '#a5d6a7' : '#ce93d8'};max-width:min(88%,560px);">
                                 <div class="mensaje-bubble-autor">${m.autorNombre || 'Usuario'} ${m.autorRole ? '• ' + String(m.autorRole).toUpperCase() : ''}</div>
                                 <div class="mensaje-bubble-texto">${m.texto || ''}</div>
                                 <div class="mensaje-bubble-meta">${m.fecha || ''}${m.autorId === currentUser?.id ? iconoEstadoMensaje(getEstadoMensajeParaVista(m)) : ''}</div>
@@ -10999,18 +11280,21 @@ th, td,
                         </div>
                     `).join('') : '<div style="text-align:center;color:#999;">Sin mensajes aún</div>'}
                 </div>
-                <div class="form-field" style="margin-top:14px;">
-                    <label>Responder:</label>
-                    <textarea id="respuestaMensajePedidoTexto" rows="4" placeholder="Escribe tu respuesta..." style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-family:Rajdhani,sans-serif;"></textarea>
-                </div>
-                <div class="flex gap-2 mt-4">
-                    <button onclick="enviarRespuestaMensajePedido(${id})" class="btn btn-primary" style="flex:1;">Enviar respuesta</button>
-                    <button onclick="cerrarModal('modalResponderMensajePedido')" class="btn btn-secondary" style="flex:1;">Cerrar</button>
+                <div class="mensaje-composer">
+                    ${(currentUser?.role === 'recepcionista' || currentUser?.role === 'admin') ? `<button onclick="abrirNuevoPedidoDesdeMensajes(${id})" class="mensaje-composer-btn mensaje-composer-plus" title="Nuevo pedido">+</button>` : `<div style="width:44px;"></div>`}
+                    <textarea id="respuestaMensajePedidoTexto" rows="1" placeholder="Escribe un mensaje..."></textarea>
+                    <button onclick="enviarRespuestaMensajePedido(${id})" class="mensaje-composer-btn mensaje-composer-send" title="Enviar">➤</button>
                 </div>
             `;
             const cont = document.getElementById('responderMensajePedidoContenido');
             if (cont) cont.innerHTML = html;
             document.getElementById('modalResponderMensajePedido').classList.add('active');
+            setTimeout(() => {
+                const box = document.getElementById('mensajeChatBox');
+                if (box) box.scrollTop = box.scrollHeight;
+                const txt = document.getElementById('respuestaMensajePedidoTexto');
+                if (txt) txt.focus();
+            }, 30);
         }
 
         function enviarRespuestaMensajePedido(id) {
@@ -11024,52 +11308,40 @@ th, td,
                 showNotification('No se pudo enviar la respuesta', 'error');
                 return;
             }
-            showNotification('Respuesta enviada ✅', 'success');
+            if (el) el.value = '';
             abrirRespuestaMensajePedido(id);
-            if (_activeModule === 'mensajes') renderMensajes();
+            actualizarBotonMensajesHeader();
         }
 
         function renderMensajes() {
             const pedidos = getPedidosMensajes();
             pedidos.forEach(asegurarConversacionPedido);
             pedidos.forEach(p => marcarMensajesPedidoComoEntregados(p.id));
+            const resumenes = getResumenUsuariosMensajes();
             const content = `
                 <div class="module-header">
                     <h2>💬 MENSAJES</h2>
-                    <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
+                    </div>
                 </div>
-                <div class="card">
-                    <div class="mensajes-subtitulo">Bandeja de mensajes y pedidos telefónicos</div>
-                    ${pedidos.length ? `
-                        <div style="display:grid;gap:12px;">
-                            ${pedidos.map(p => {
-                                const ultimos = getConversacionPedido(p.id).slice(-2);
-                                return `
-                                <div class="mensaje-card" style="border:2px solid ${p.estado === 'pendiente' ? '#b39ddb' : '#d7ccc8'};">
-                                    <div class="mensaje-card-main">
-                                        <div class="mensaje-cliente">${p.clienteNombre || 'Cliente sin nombre'}</div>
-                                        <div class="mensaje-fecha">${p.fecha || ''}</div>
-                                        <div class="mensaje-detalle">📍 ${p.clienteDireccion || 'Sin dirección'}${p.clienteTelefono ? ' | ☎️ ' + p.clienteTelefono : ''}</div>
-                                        <div class="mensaje-detalle">💰 Precio sugerido: ${formatCurrency(p.total || 0)}</div>
-                                        <div class="mensaje-detalle">🔧 Válvula: ${(p.tipoValvula || 'normal').toUpperCase()}</div>
-                                        <div class="mensaje-detalle" style="color:#555;">${(p.items||[]).map(i => `${i.nombre} x${i.cantidad}`).join(', ') || 'Sin productos'}</div>
-                                        <div class="mensaje-estado"><span style="padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;background:${p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : '#e8f5e9'};color:${p.estado === 'pendiente' ? '#e65100' : p.estado === 'aceptado' ? '#1565c0' : '#2d5016'};">${String(p.estado || 'pendiente').toUpperCase()}</span></div>
-                                        ${ultimos.length ? `<div class="mensaje-preview">
-                                            <div class="mensaje-preview-title">Últimos mensajes</div>
-                                            ${ultimos.map(m => `<div class="mensaje-preview-row"><span><strong>${m.autorNombre}:</strong> ${m.texto}</span><span>${m.autorId === currentUser?.id ? iconoEstadoMensaje(getEstadoMensajeParaVista(m)) : ''}</span></div>`).join('')}
-                                        </div>` : ''}
-                                    </div>
-                                    <div class="mensaje-actions">
-                                        ${(currentUser?.role === 'admin' || p.vendedorAsignadoId === currentUser?.id) && p.estado === 'pendiente' ? `<button onclick="irAPedidoRecepcionista(${p.id})" class="btn btn-primary" style="padding:8px 12px;font-size:12px;">📥 Ir a pedido</button>` : ''}
-                                        <button onclick="abrirRespuestaMensajePedido(${p.id})" class="btn btn-warning" style="padding:8px 12px;font-size:12px;">💬 Responder</button>
-                                        <button onclick="verDetallePedido(${p.id})" class="btn btn-info" style="padding:8px 12px;font-size:12px;">👁 Ver</button>
-                                        ${currentUser?.id && p.vendedorAsignadoId === currentUser.id && p.estado === 'pendiente' ? `<button onclick="aceptarPedidoVendedor(${p.id})" class="btn btn-success" style="padding:8px 12px;font-size:12px;">✅ Aceptar</button>` : ''}
-                                        ${currentUser?.id && p.vendedorAsignadoId === currentUser.id && p.estado === 'aceptado' ? `<button onclick="marcarPedidoEntregado(${p.id})" class="btn btn-primary" style="padding:8px 12px;font-size:12px;">📦 Entregado</button>` : ''}
-                                    </div>
-                                </div>`;
-                            }).join('')}
-                        </div>
-                    ` : `<div style="text-align:center;color:#999;padding:30px 10px;">No hay mensajes por ahora</div>`}
+                <div class="card mensajes-layout">
+                    <div class="mensajes-subtitulo">Usuarios primero. Arriba salen primero los que tienen caja abierta.</div>
+                    <div class="mensajes-lista">
+                        ${resumenes.length ? resumenes.map(r => `
+                            <div class="mensaje-list-item" onclick="abrirChatUsuarioMensajes(${r.pedidoId})">
+                                <div class="mensaje-list-item-main">
+                                    <div class="mensaje-list-nombre">${r.nombre || 'Usuario'}</div>
+                                    <div class="mensaje-list-sub">${r.preview || 'Sin mensajes'}</div>
+                                </div>
+                                <div class="mensaje-list-right">
+                                    <div class="mensaje-list-fecha">${r.fecha || ''}</div>
+                                    ${r.cajaAbierta ? `<div class="mensaje-list-open">CAJA ABIERTA</div>` : ''}
+                                    ${r.noLeidos > 0 ? `<div class="mensaje-list-badge">${r.noLeidos}</div>` : ''}
+                                </div>
+                            </div>
+                        `).join('') : `<div style="text-align:center;color:#999;padding:30px 10px;">No hay mensajes por ahora</div>`}
+                    </div>
                 </div>
                 <div id="modalDetallePedido" class="modal">
                     <div class="modal-content">
@@ -11081,12 +11353,15 @@ th, td,
                     </div>
                 </div>
                 <div id="modalResponderMensajePedido" class="modal">
-                    <div class="modal-content" style="max-width:700px;">
-                        <div class="modal-header">
-                            <h3>💬 Conversación del pedido</h3>
+                    <div class="modal-content mensaje-chat-modal" style="max-width:760px;">
+                        <div class="mensaje-chat-modal-header">
+                            <div>
+                                <div class="mensaje-chat-modal-title">Mensajes</div>
+                                <div class="mensaje-chat-modal-sub">Chat del usuario y nuevo pedido desde aquí</div>
+                            </div>
                             <button class="btn-close" onclick="cerrarModal('modalResponderMensajePedido')">×</button>
                         </div>
-                        <div id="responderMensajePedidoContenido"></div>
+                        <div class="mensaje-chat-modal-body" id="responderMensajePedidoContenido"></div>
                     </div>
                 </div>
             `;
@@ -11737,6 +12012,28 @@ button:hover {
   background:#fff8e1;
   color:#e65100;
   border:2px solid #ffcc80;
+}
+
+
+/* ===== MENSAJES TIPO CHAT ===== */
+.mensaje-topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:2px solid #e1bee7;border-radius:14px;background:linear-gradient(135deg,#f3e5f5,#ede7f6);margin-bottom:12px;}
+.mensaje-topbar-nombre{font-size:20px;font-weight:700;color:#4a148c;line-height:1.15;}
+.mensaje-topbar-sub{font-size:13px;color:#6a1b9a;font-weight:700;margin-top:2px;}
+.mensaje-chat-box{max-height:48vh;overflow-y:auto;border:2px solid #eee;border-radius:14px;padding:12px;background:#fafafa;}
+.mensaje-composer{display:flex;align-items:center;gap:8px;margin-top:12px;}
+.mensaje-composer-btn{border:none;border-radius:999px;min-width:44px;height:44px;padding:0 12px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:22px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+.mensaje-composer-plus{background:#ede7f6;color:#6a1b9a;}
+.mensaje-composer-send{background:#6a1b9a;color:#fff;}
+.mensaje-composer textarea{flex:1;min-height:44px;max-height:120px;padding:11px 14px;border:2px solid #d1c4e9;border-radius:22px;font-size:17px;font-family:Rajdhani,sans-serif;resize:none;background:#fff;}
+.mensaje-chat-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+@media (max-width: 768px){
+  .mensaje-topbar{padding:12px;}
+  .mensaje-topbar-nombre{font-size:19px;}
+  .mensaje-topbar-sub{font-size:13px;}
+  .mensaje-chat-box{max-height:52vh;padding:12px;}
+  .mensaje-composer{gap:7px;position:sticky;bottom:0;background:#fff;padding-top:8px;}
+  .mensaje-composer-btn{min-width:46px;height:46px;font-size:23px;}
+  .mensaje-composer textarea{font-size:18px;min-height:46px;}
 }
 
 </style>
