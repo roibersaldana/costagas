@@ -1963,137 +1963,6 @@
             });
         }
 
-
-        function getPedidosAsignadosVendedorNuevoPedido() {
-            if (!currentUser || currentUser.role !== 'vendedor') return [];
-            const pedidos = Storage.getArray('pedidos');
-            return pedidos.filter(p => p && p.vendedorAsignadoId === currentUser.id && ['pendiente','aceptado'].includes(p.estado));
-        }
-
-        function getPedidosEnviadosRecepcionistaNuevoPedido() {
-            if (!currentUser || currentUser.role !== 'recepcionista') return [];
-            const pedidos = Storage.getArray('pedidos');
-            return pedidos.filter(p => p && (p.creadoPorId === currentUser.id || p.usuarioId === currentUser.id || (p.creadoPorRole === 'recepcionista' && (p.creadoPor || '').toLowerCase() === (currentUser.nombre || '').toLowerCase())))
-                         .sort((a,b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
-        }
-
-        function generarPanelPedidosRecepcionistaNuevoPedido() {
-            const pedidos = getPedidosEnviadosRecepcionistaNuevoPedido();
-            if (!pedidos.length) {
-                return `
-                    <div class="card" style="border:2px dashed #b39ddb;background:#faf7ff;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#6a1b9a;margin-bottom:8px;">☎️ Lista de pedidos enviados por recepción</div>
-                        <div style="color:#777;">Todavía no has enviado pedidos telefónicos desde este usuario.</div>
-                    </div>`;
-            }
-            return `
-                <div class="card" style="border:2px solid #6a1b9a;background:#faf7ff;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#6a1b9a;">☎️ Lista de pedidos enviados por recepción</div>
-                        <div style="background:#6a1b9a;color:#fff;padding:6px 12px;border-radius:999px;font-weight:700;">${pedidos.length} pedido${pedidos.length!==1?'s':''}</div>
-                    </div>
-                    <div style="display:grid;gap:10px;">
-                        ${pedidos.slice(0, 12).map(p => {
-                            const color = p.estado === 'pendiente' ? '#ef6c00' : p.estado === 'aceptado' ? '#1565c0' : '#2e7d32';
-                            const fondo = p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : '#e8f5e9';
-                            return `
-                            <div style="border:2px solid ${color};background:#fff;border-radius:12px;padding:12px;">
-                                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start;">
-                                    <div>
-                                        <div style="font-weight:700;font-size:17px;color:#2d5016;">${p.clienteNombre || 'Cliente'}</div>
-                                        <div style="font-size:13px;color:#666;margin-top:4px;">${p.fecha || ''}</div>
-                                        <div style="font-size:13px;color:#555;margin-top:4px;">${(p.clienteTelefono||'').trim() ? '📞 ' + p.clienteTelefono + ' · ' : ''}${(p.clienteDireccion||'').trim() ? '📍 ' + p.clienteDireccion : ''}</div>
-                                        <div style="font-size:13px;color:#7b1fa2;font-weight:700;margin-top:4px;">Válvula: ${(p.tipoValvula || 'normal').toUpperCase()}</div>
-                                        <div style="font-size:13px;color:#2d5016;font-weight:700;margin-top:4px;">Vendedor: ${p.vendedorAsignadoNombre || 'Sin asignar'}</div>
-                                        <div style="font-size:13px;color:#ef6c00;font-weight:700;margin-top:4px;">Precio sugerido: ${formatCurrency(p.total || 0)}</div>
-                                    </div>
-                                    <div style="text-align:right;min-width:160px;">
-                                        <div style="padding:5px 10px;border-radius:999px;background:${fondo};color:${color};font-weight:700;display:inline-block;">${String(p.estado||'pendiente').toUpperCase()}</div>
-                                        ${p.fechaAceptacion ? `<div style="font-size:12px;color:#1565c0;margin-top:8px;">Aceptado: ${p.fechaAceptacion}</div>` : ''}
-                                        ${p.fechaEntrega ? `<div style="font-size:12px;color:#2e7d32;margin-top:4px;">Entregado: ${p.fechaEntrega}</div>` : ''}
-                                    </div>
-                                </div>
-                                <div style="margin-top:10px;font-size:13px;color:#333;"><strong>Productos:</strong> ${(p.items||[]).map(i => `${i.nombre} x${i.cantidad}`).join(', ')}</div>
-                            </div>`;
-                        }).join('')}
-                    </div>
-                </div>`;
-        }
-
-        function generarPanelPedidosAsignadosNuevoPedido() {
-            const pedidos = getPedidosAsignadosVendedorNuevoPedido();
-            if (!pedidos.length) {
-                return `
-                    <div class="card" style="border:2px dashed #d7ccc8;background:#fffaf4;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#8d6e63;margin-bottom:8px;">📞 Cola de pedidos asignados por recepción</div>
-                        <div style="color:#777;">No tienes pedidos telefónicos pendientes o aceptados en este momento.</div>
-                    </div>`;
-            }
-            return `
-                <div class="card" style="border:2px solid #7b1fa2;background:#fcf7ff;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
-                        <div style="font-family:'Russo One',sans-serif;font-size:20px;color:#7b1fa2;">📞 Cola de pedidos asignados por recepción</div>
-                        <div style="background:#7b1fa2;color:#fff;padding:6px 12px;border-radius:999px;font-weight:700;">${pedidos.length} pedido${pedidos.length!==1?'s':''}</div>
-                    </div>
-                    <div style="display:grid;gap:12px;">
-                        ${pedidos.slice().reverse().map(p => `
-                            <div style="border:2px solid ${p.estado==='pendiente' ? '#ffcc80' : '#90caf9'};background:#fff;border-radius:12px;padding:14px;">
-                                <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start;">
-                                    <div>
-                                        <div style="font-weight:700;font-size:18px;color:#2d5016;">${p.clienteNombre || 'Cliente'}</div>
-                                        <div style="font-size:13px;color:#666;margin-top:4px;">${p.fecha || ''}</div>
-                                        <div style="font-size:13px;color:#555;margin-top:4px;">${(p.clienteTelefono||'').trim() ? '📞 ' + p.clienteTelefono + ' · ' : ''}${(p.clienteDireccion||'').trim() ? '📍 ' + p.clienteDireccion : ''}</div>
-                                        <div style="font-size:13px;color:#7b1fa2;font-weight:700;margin-top:4px;">Válvula: ${(p.tipoValvula || 'normal').toUpperCase()}</div>
-                                        <div style="font-size:13px;color:#ef6c00;font-weight:700;margin-top:4px;">Precio sugerido por recepción: ${formatCurrency(p.total || 0)}</div>
-                                    </div>
-                                    <div style="text-align:right;min-width:180px;">
-                                        <div style="padding:5px 10px;border-radius:999px;background:${p.estado==='pendiente' ? '#fff3e0' : '#e3f2fd'};color:${p.estado==='pendiente' ? '#e65100' : '#1565c0'};font-weight:700;display:inline-block;">${String(p.estado||'').toUpperCase()}</div>
-                                        <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">
-                                            ${p.estado === 'pendiente' ? `<button onclick="aceptarPedidoVendedor(${p.id}); setTimeout(()=>renderNuevoPedido(),120);" class="btn btn-success">✅ Aceptar</button>` : ''}
-                                            ${p.estado === 'aceptado' ? `<button onclick="cargarPedidoTelefonicoEnNuevoPedido(${p.id})" class="btn btn-primary">🚚 Procesar pedido</button>` : ''}
-                                        </div>
-                                    </div>
-                                </div>
-                                <div style="margin-top:10px;font-size:13px;color:#333;"><strong>Productos:</strong> ${(p.items||[]).map(i => `${i.nombre} x${i.cantidad}`).join(', ')}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>`;
-        }
-
-        function cargarPedidoTelefonicoEnNuevoPedido(id) {
-            const pedido = Storage.getArray('pedidos').find(p => p.id === id);
-            if (!pedido) { showNotification('No se encontró el pedido', 'error'); return; }
-            if (pedido.vendedorAsignadoId !== currentUser?.id && currentUser?.role !== 'admin') {
-                showNotification('Este pedido no te corresponde', 'error');
-                return;
-            }
-            if (pedido.estado !== 'aceptado') {
-                showNotification('Primero debes aceptar el pedido', 'error');
-                return;
-            }
-            _pedidoTelefonicoEnProceso = pedido.id;
-            carritoActual = Array.isArray(pedido.items) ? JSON.parse(JSON.stringify(pedido.items)) : [];
-            pagosActuales = { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0, cantidadRecibos: 0, cantidadValesFISE: 0 };
-            renderNuevoPedido();
-            setTimeout(() => {
-                const n = document.getElementById('clienteNombre'); if (n) n.value = pedido.clienteNombre || '';
-                const t = document.getElementById('clienteTelefono'); if (t) t.value = pedido.clienteTelefono || '';
-                const d = document.getElementById('clienteDireccion'); if (d) d.value = pedido.clienteDireccion || '';
-                updateCarrito();
-                const alerta = document.getElementById('alertaPedidoTelefonicoActivo');
-                if (alerta) alerta.scrollIntoView({behavior:'smooth', block:'center'});
-            }, 60);
-            showNotification('Pedido telefónico cargado. Revisa el precio final y procesa el cobro.', 'info');
-        }
-
-        function cancelarCargaPedidoTelefonico() {
-            _pedidoTelefonicoEnProceso = null;
-            carritoActual = [];
-            pagosActuales = { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0, cantidadRecibos: 0, cantidadValesFISE: 0 };
-            renderNuevoPedido();
-        }
-
         function crearNotificacionPedido(pedido) {
             if (!pedido || !pedido.vendedorAsignadoId) return;
             const notificaciones = Storage.getArray('notificacionesPedidos');
@@ -2146,8 +2015,6 @@
 
         let _pedidoToneTimer = null;
         let _pedidoAudioCtx = null;
-        let _pedidoMasterGain = null;
-        let _pedidoCompressor = null;
 
         function contarAlertasSonorasPendientes() {
             if (!currentUser || currentUser.role !== 'vendedor') return 0;
@@ -2163,49 +2030,20 @@
                 if (_pedidoAudioCtx.state === 'suspended') {
                     _pedidoAudioCtx.resume().catch(() => {});
                 }
-                if (!_pedidoMasterGain) {
-                    _pedidoMasterGain = _pedidoAudioCtx.createGain();
-                    _pedidoMasterGain.gain.value = 1.0;
-                    _pedidoCompressor = _pedidoAudioCtx.createDynamicsCompressor();
-                    _pedidoCompressor.threshold.value = -22;
-                    _pedidoCompressor.knee.value = 18;
-                    _pedidoCompressor.ratio.value = 14;
-                    _pedidoCompressor.attack.value = 0.002;
-                    _pedidoCompressor.release.value = 0.16;
-                    _pedidoMasterGain.connect(_pedidoCompressor);
-                    _pedidoCompressor.connect(_pedidoAudioCtx.destination);
-                }
                 const now = _pedidoAudioCtx.currentTime;
-                const secuencia = [
-                    {off:0.00, freq:880,  type:'square',   vol:0.98, dur:0.16},
-                    {off:0.18, freq:1320, type:'square',   vol:0.98, dur:0.16},
-                    {off:0.36, freq:1760, type:'square',   vol:0.96, dur:0.18},
-                    {off:0.60, freq:1320, type:'sawtooth', vol:0.94, dur:0.16},
-                    {off:0.78, freq:1760, type:'square',   vol:1.00, dur:0.20},
-                    {off:1.02, freq:2200, type:'square',   vol:1.00, dur:0.24}
-                ];
-                secuencia.forEach(t => {
-                    const osc1 = _pedidoAudioCtx.createOscillator();
-                    const osc2 = _pedidoAudioCtx.createOscillator();
+                [0, 0.32].forEach(offset => {
+                    const osc = _pedidoAudioCtx.createOscillator();
                     const gain = _pedidoAudioCtx.createGain();
-                    osc1.type = t.type;
-                    osc2.type = 'square';
-                    osc1.frequency.setValueAtTime(t.freq, now + t.off);
-                    osc2.frequency.setValueAtTime(t.freq * 0.5, now + t.off);
-                    gain.gain.setValueAtTime(0.0001, now + t.off);
-                    gain.gain.exponentialRampToValueAtTime(t.vol, now + t.off + 0.008);
-                    gain.gain.exponentialRampToValueAtTime(0.0001, now + t.off + t.dur);
-                    osc1.connect(gain);
-                    osc2.connect(gain);
-                    gain.connect(_pedidoMasterGain);
-                    osc1.start(now + t.off);
-                    osc2.start(now + t.off);
-                    osc1.stop(now + t.off + t.dur + 0.04);
-                    osc2.stop(now + t.off + t.dur + 0.04);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, now + offset);
+                    gain.gain.setValueAtTime(0.0001, now + offset);
+                    gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.02);
+                    gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.22);
+                    osc.connect(gain);
+                    gain.connect(_pedidoAudioCtx.destination);
+                    osc.start(now + offset);
+                    osc.stop(now + offset + 0.24);
                 });
-                if (navigator.vibrate) {
-                    navigator.vibrate([450, 120, 450, 120, 650, 120, 650]);
-                }
             } catch (e) {}
         }
 
@@ -2227,7 +2065,7 @@
                         } else {
                             detenerAlertaSonoraPedidos();
                         }
-                    }, 900);
+                    }, 3500);
                 }
             } else {
                 detenerAlertaSonoraPedidos();
@@ -3483,7 +3321,6 @@
 
         // ==================== MÓDULO: NUEVO PEDIDO ====================
         let carritoActual = [];
-        let _pedidoTelefonicoEnProceso = null;
         let pagosActuales = {
             efectivo: 0,
             yape: 0,
@@ -3498,32 +3335,15 @@
             const clientes = Storage.getArray('clientes');
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
             const esRecepcionista = currentUser?.role === 'recepcionista';
-            const esVendedor = currentUser?.role === 'vendedor';
             const vendedoresTurno = getUsuariosVendedoresConCajaAbierta();
-            const pedidoTelefonicoActivo = esVendedor && _pedidoTelefonicoEnProceso
-                ? Storage.getArray('pedidos').find(p => p.id === _pedidoTelefonicoEnProceso)
-                : null;
             
             const content = `
                 <div class="module-header">
                     <h2>NUEVO PEDIDO</h2>
                     <button onclick="backToMenu()" class="btn btn-secondary">← VOLVER</button>
                 </div>
-
-                ${esRecepcionista ? generarPanelPedidosRecepcionistaNuevoPedido() : ''}
-                ${esVendedor ? generarPanelPedidosAsignadosNuevoPedido() : ''}
+                
                 <div class="card">
-                    ${pedidoTelefonicoActivo ? `
-                    <div id="alertaPedidoTelefonicoActivo" style="margin-bottom:16px;padding:14px 16px;border-radius:12px;border:2px solid #ffcc80;background:#fff8e1;">
-                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;">
-                            <div>
-                                <div style="font-weight:700;font-size:18px;color:#e65100;">🚚 Procesando pedido telefónico aceptado</div>
-                                <div style="font-size:13px;color:#6d4c41;margin-top:4px;">Cliente: <strong>${pedidoTelefonicoActivo.clienteNombre || ''}</strong> · Válvula: <strong>${String(pedidoTelefonicoActivo.tipoValvula || 'normal').toUpperCase()}</strong></div>
-                                <div style="font-size:13px;color:#7b1fa2;margin-top:4px;">El precio cargado es solo sugerido por recepción. Aquí puedes ajustarlo antes de cobrar.</div>
-                            </div>
-                            <button onclick="cancelarCargaPedidoTelefonico()" class="btn btn-secondary">Limpiar carga</button>
-                        </div>
-                    </div>` : ''}
                     <div class="form-row">
                         <div class="form-field">
                             <label>Cliente:</label>
@@ -3560,7 +3380,7 @@
                         </div>
                         ` : `
                         <div class="form-field">
-                            <label>👷 Trabajador Asignado: ${currentUser?.role !== 'admin' ? '<span style="color:#2d5016;font-size:12px;">(automático para usuario vendedor)</span>' : (currentUser?.trabajadorId ? '' : '<span style="color:#f44336;font-size:12px;">* obligatorio</span>')}</label>
+                            <label>👷 Trabajador Asignado: ${currentUser?.trabajadorId || currentUser?.role==='admin' ? '' : '<span style="color:#f44336;font-size:12px;">* obligatorio</span>'}</label>
                             <select id="pedidoTrabajador"
                                 style="width:100%;padding:12px;border:2px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:Rajdhani,sans-serif;${currentUser?.trabajadorId && currentUser?.role !== 'admin' ? 'background:#f1f8e9;cursor:not-allowed;opacity:0.9;border-color:#a5d6a7;' : ''}"
                                 ${currentUser?.trabajadorId && currentUser?.role !== 'admin' ? 'disabled' : ''}>
@@ -3572,7 +3392,6 @@
                         `}
                     </div>
 
-                    ${esRecepcionista ? '' : `
                     <!-- ══ CILINDROS PRESTADOS ══ -->
                     <div style="background:linear-gradient(135deg,#e3f2fd,#fff8e1);border-radius:14px;padding:16px 18px;margin-top:16px;border:2px solid #90caf9;">
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -3662,7 +3481,7 @@
                             </div>
                             
                             <button onclick="${esRecepcionista ? 'procesarPedidoRecepcionista()' : 'mostrarPagos()'}" class="btn btn-primary w-full" style="margin-top: 20px; padding: 16px; font-size: 20px;">
-                                ${esRecepcionista ? 'ENVIAR PEDIDO AL VENDEDOR' : (_pedidoTelefonicoEnProceso ? 'PROCESAR PEDIDO ASIGNADO' : 'PROCESAR PEDIDO')}
+                                ${esRecepcionista ? 'ENVIAR PEDIDO AL VENDEDOR' : 'PROCESAR PEDIDO'}
                             </button>
                         </div>
                     </div>
@@ -4280,35 +4099,17 @@
             // Si hay vuelto significa que se pagó de más → el pedido está completamente cobrado
             const tipoPagoReal = (vuelto > 0.005 || credito === 0) ? 'completo' : pagado === 0 ? 'credito' : 'mixto';
 
-            const pedidoTelefonicoActivo = obtenerPedidoTelefonicoActivo();
-            let nuevoPedido;
-            if (pedidoTelefonicoActivo) {
-                nuevoPedido = aplicarActualizacionPedidoTelefonico({
-                    clienteId, clienteNombre: nombreCliente,
-                    clienteTelefono: document.getElementById('clienteTelefono')?.value || pedidoTelefonicoActivo.clienteTelefono || '',
-                    clienteDireccion: document.getElementById('clienteDireccion')?.value || pedidoTelefonicoActivo.clienteDireccion || '',
-                    trabajadorId: trabajador.id, trabajadorCodigo: trabajador.codigo, trabajadorNombre: trabajador.nombre,
-                    items: [...carritoActual], total, pagos: pagosMixto,
-                    creditoParcial: credito, tipoPago: tipoPagoReal,
-                    fechaCobro: getCurrentDateTime(), estado: tipoPagoReal,
-                    usuario: currentUser.nombre, usuarioId: currentUser.id,
-                    entregadoPor: currentUser.nombre,
-                    fechaEntrega: getCurrentDateTime(),
-                    precioSugeridoRecepcion: pedidoTelefonicoActivo.total || 0
-                });
-            } else {
-                const pedidos = Storage.getArray('pedidos');
-                nuevoPedido = {
-                    id: generateId(), clienteId, clienteNombre: nombreCliente,
-                    trabajadorId: trabajador.id, trabajadorCodigo: trabajador.codigo, trabajadorNombre: trabajador.nombre,
-                    items: [...carritoActual], total, pagos: pagosMixto,
-                    creditoParcial: credito, tipoPago: tipoPagoReal,
-                    fecha: getCurrentDateTime(), estado: tipoPagoReal,
-                    usuario: currentUser.nombre, usuarioId: currentUser.id
-                };
-                pedidos.push(nuevoPedido);
-                Storage.set('pedidos', pedidos);
-            }
+            const pedidos = Storage.getArray('pedidos');
+            const nuevoPedido = {
+                id: generateId(), clienteId, clienteNombre: nombreCliente,
+                trabajadorId: trabajador.id, trabajadorCodigo: trabajador.codigo, trabajadorNombre: trabajador.nombre,
+                items: [...carritoActual], total, pagos: pagosMixto,
+                creditoParcial: credito, tipoPago: tipoPagoReal,
+                fecha: getCurrentDateTime(), estado: tipoPagoReal,
+                usuario: currentUser.nombre, usuarioId: currentUser.id
+            };
+            pedidos.push(nuevoPedido);
+            Storage.set('pedidos', pedidos);
             descontarStock();
 
             // ✅ Sumar vacíos al stock: venta suma casco, préstamo no
@@ -4374,27 +4175,6 @@
                 <rect x="5" y="37" width="22" height="5" rx="2" fill="${color}" opacity=".8"/>
                 <text x="16" y="27" text-anchor="middle" font-size="11" font-weight="700" fill="white" font-family="Rajdhani,sans-serif">${label}</text>
             </svg>`;
-        }
-
-
-        function obtenerPedidoTelefonicoActivo() {
-            if (!_pedidoTelefonicoEnProceso) return null;
-            return Storage.getArray('pedidos').find(p => p.id === _pedidoTelefonicoEnProceso) || null;
-        }
-
-        function aplicarActualizacionPedidoTelefonico(baseUpdate = {}) {
-            const pedidoBase = obtenerPedidoTelefonicoActivo();
-            if (!pedidoBase) return null;
-            const pedidos = Storage.getArray('pedidos');
-            const idx = pedidos.findIndex(p => p.id === pedidoBase.id);
-            if (idx === -1) return null;
-            pedidos[idx] = { ...pedidos[idx], ...baseUpdate };
-            Storage.set('pedidos', pedidos);
-            if (pedidos[idx].estado && pedidos[idx].estado !== 'aceptado' && pedidos[idx].estado !== 'pendiente') {
-                actualizarEstadoNotificacionPedido(pedidoBase.id, pedidos[idx].estado);
-                _pedidoTelefonicoEnProceso = null;
-            }
-            return pedidos[idx];
         }
 
         function getTrabajadorData() {
@@ -4479,50 +4259,26 @@
             }
             let clienteId = guardarObtenerCliente(nombreCliente);
             
-            const pedidoTelefonicoActivo = obtenerPedidoTelefonicoActivo();
-            let nuevoPedido;
-            if (pedidoTelefonicoActivo) {
-                nuevoPedido = aplicarActualizacionPedidoTelefonico({
-                    clienteId,
-                    clienteNombre: nombreCliente,
-                    clienteTelefono: document.getElementById('clienteTelefono')?.value || pedidoTelefonicoActivo.clienteTelefono || '',
-                    clienteDireccion: document.getElementById('clienteDireccion')?.value || pedidoTelefonicoActivo.clienteDireccion || '',
-                    trabajadorId: trabajador.id,
-                    trabajadorCodigo: trabajador.codigo,
-                    trabajadorNombre: trabajador.nombre,
-                    items: [...carritoActual],
-                    total,
-                    pagos: {...pagosActuales},
-                    tipoPago: 'normal',
-                    fechaCobro: getCurrentDateTime(),
-                    estado: 'completado',
-                    usuario: currentUser.nombre,
-                    usuarioId: currentUser.id,
-                    entregadoPor: currentUser.nombre,
-                    fechaEntrega: getCurrentDateTime(),
-                    precioSugeridoRecepcion: pedidoTelefonicoActivo.total || 0
-                });
-            } else {
-                const pedidos = Storage.getArray('pedidos');
-                nuevoPedido = {
-                    id: generateId(),
-                    clienteId,
-                    clienteNombre: nombreCliente,
-                    trabajadorId: trabajador.id,
-                    trabajadorCodigo: trabajador.codigo,
-                    trabajadorNombre: trabajador.nombre,
-                    items: [...carritoActual],
-                    total,
-                    pagos: {...pagosActuales},
-                    tipoPago: 'normal',
-                    fecha: getCurrentDateTime(),
-                    estado: 'completado',
-                    usuario: currentUser.nombre,
-                    usuarioId: currentUser.id
-                };
-                pedidos.push(nuevoPedido);
-                Storage.set('pedidos', pedidos);
-            }
+            const pedidos = Storage.getArray('pedidos');
+            const nuevoPedido = {
+                id: generateId(),
+                clienteId,
+                clienteNombre: nombreCliente,
+                trabajadorId: trabajador.id,
+                trabajadorCodigo: trabajador.codigo,
+                trabajadorNombre: trabajador.nombre,
+                items: [...carritoActual],
+                total,
+                pagos: {...pagosActuales},
+                tipoPago: 'normal',
+                fecha: getCurrentDateTime(),
+                estado: 'completado',
+                usuario: currentUser.nombre,
+                usuarioId: currentUser.id
+            };
+            
+            pedidos.push(nuevoPedido);
+            Storage.set('pedidos', pedidos);
             descontarStock();
 
             // ✅ Leer cilindros prestados del formulario
@@ -4587,50 +4343,24 @@
             let clienteId = guardarObtenerCliente(nombreCliente);
 
             // Guardar pedido
-            const pedidoTelefonicoActivo = obtenerPedidoTelefonicoActivo();
-            let nuevoPedido;
-            if (pedidoTelefonicoActivo) {
-                nuevoPedido = aplicarActualizacionPedidoTelefonico({
-                    clienteId,
-                    clienteNombre: nombreCliente,
-                    clienteTelefono: document.getElementById('clienteTelefono')?.value || pedidoTelefonicoActivo.clienteTelefono || '',
-                    clienteDireccion: document.getElementById('clienteDireccion')?.value || pedidoTelefonicoActivo.clienteDireccion || '',
-                    trabajadorId: trabajador.id,
-                    trabajadorCodigo: trabajador.codigo,
-                    trabajadorNombre: trabajador.nombre,
-                    items: [...carritoActual],
-                    total,
-                    pagos: { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0 },
-                    tipoPago: 'credito',
-                    fechaCobro: getCurrentDateTime(),
-                    estado: 'credito',
-                    usuario: currentUser.nombre,
-                    usuarioId: currentUser.id,
-                    entregadoPor: currentUser.nombre,
-                    fechaEntrega: getCurrentDateTime(),
-                    precioSugeridoRecepcion: pedidoTelefonicoActivo.total || 0
-                });
-            } else {
-                const pedidos = Storage.getArray('pedidos');
-                nuevoPedido = {
-                    id: generateId(),
-                    clienteId,
-                    clienteNombre: nombreCliente,
-                    trabajadorId: trabajador.id,
-                    trabajadorCodigo: trabajador.codigo,
-                    trabajadorNombre: trabajador.nombre,
-                    items: [...carritoActual],
-                    total,
-                    pagos: { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0 },
-                    tipoPago: 'credito',
-                    fecha: getCurrentDateTime(),
-                    estado: 'credito',
-                    usuario: currentUser.nombre,
-                    usuarioId: currentUser.id
-                };
-                pedidos.push(nuevoPedido);
-                Storage.set('pedidos', pedidos);
-            }
+            const pedidos = Storage.getArray('pedidos');
+            const nuevoPedido = {
+                id: generateId(),
+                clienteId,
+                clienteNombre: nombreCliente,
+                trabajadorId: trabajador.id,
+                trabajadorCodigo: trabajador.codigo,
+                trabajadorNombre: trabajador.nombre,
+                items: [...carritoActual],
+                total,
+                pagos: { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0 },
+                tipoPago: 'credito',
+                fecha: getCurrentDateTime(),
+                estado: 'credito',
+                usuario: currentUser.nombre
+            };
+            pedidos.push(nuevoPedido);
+            Storage.set('pedidos', pedidos);
             descontarStock();
 
             // ✅ Leer cilindros prestados del formulario
@@ -4808,9 +4538,8 @@
             ['prestamo10kg','prestamo5kg','prestamo45kg'].forEach(id => {
                 const el = document.getElementById(id); if(el) el.value = 0;
             });
-            _pedidoTelefonicoEnProceso = null;
             carritoActual = [];
-            pagosActuales = { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0, cantidadRecibos: 0, cantidadValesFISE: 0 };
+            pagosActuales = { efectivo: 0, yape: 0, recibos: 0, valesFISE: 0 };
             cerrarModal('modalPagos');
             renderNuevoPedido();
         }
