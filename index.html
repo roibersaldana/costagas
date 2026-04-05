@@ -11530,7 +11530,281 @@ th, td,
         }
 
         // ==================== MÓDULO: PEDIDOS ====================
+        function idsIguales(a, b) {
+            return String(a ?? '') === String(b ?? '');
+        }
+
+        function usuarioPuedeGestionarPedido(p, u = currentUser) {
+            if (!p || !u) return false;
+            if (u.role === 'admin' || u.role === 'recepcionista') return true;
+            if (u.role === 'vendedor') {
+                return idsIguales(p.vendedorAsignadoId, u.id) ||
+                       idsIguales(p.usuarioId, u.id) ||
+                       idsIguales(p.creadoPorId, u.id) ||
+                       (u.trabajadorId && idsIguales(p.trabajadorId, u.trabajadorId)) ||
+                       ((p.usuario || '').toLowerCase() === (u.nombre || '').toLowerCase());
+            }
+            return false;
+        }
+
+        function pagosPedidoNormalizados(pedido) {
+            const pagos = pedido?.pagos || {};
+            return {
+                efectivo: +(pagos.efectivo || 0),
+                yape: +(pagos.yape || 0),
+                recibos: +(pagos.recibos || 0),
+                valesFISE: +(pagos.valesFISE || 0),
+                cantidadRecibos: +(pagos.cantidadRecibos || 0),
+                cantidadValesFISE: +(pagos.cantidadValesFISE || 0),
+                vueltoMonto: +(pagos?.vuelto?.monto || 0),
+                vueltoMetodo: pagos?.vuelto?.metodo || ''
+            };
+        }
+
+        function obtenerPedidoCajaOwnerUserId(pedido) {
+            if (!pedido) return null;
+            if (pedido.vendedorAsignadoId !== undefined && pedido.vendedorAsignadoId !== null && pedido.vendedorAsignadoId !== '') return pedido.vendedorAsignadoId;
+            if (pedido.usuarioId !== undefined && pedido.usuarioId !== null && pedido.usuarioId !== '') return pedido.usuarioId;
+            const usuarios = Storage.getArray('usuarios');
+            const user = usuarios.find(u => (u?.nombre || '').toLowerCase() === (pedido.usuario || '').toLowerCase());
+            return user ? user.id : null;
+        }
+
+        function getCajaKeyByUserId(userId) {
+            if (userId === undefined || userId === null || userId === '') return null;
+            const usuarios = Storage.getArray('usuarios');
+            const user = usuarios.find(u => idsIguales(u.id, userId));
+            if (user?.role === 'admin') return 'caja';
+            return 'caja_u' + userId;
+        }
+
+        function getCajaMovimientoPedido(pedido) {
+            if (!pedido) return 0;
+            const pagos = pagosPedidoNormalizados(pedido);
+            let total = pagos.efectivo + pagos.yape;
+            if (pagos.vueltoMetodo === 'efectivo') total -= pagos.vueltoMonto;
+            return +total.toFixed(2);
+        }
+
+        function getVentaMontoPedido(pedido) {
+            if (!pedido) return 0;
+            const pagos = pagosPedidoNormalizados(pedido);
+            const pagado = pagos.efectivo + pagos.yape + pagos.recibos + pagos.valesFISE;
+            const tipo = String(pedido.tipoPago || pedido.estado || '').toLowerCase();
+            if (tipo === 'credito') return 0;
+            if (tipo === 'mixto') return +pagado.toFixed(2);
+            return +((pagado > 0 ? pagado : (+pedido.total || 0))).toFixed(2);
+        }
+
+        function getCreditoPendientePedido(pedido) {
+            if (!pedido) return 0;
+            const pagos = pagosPedidoNormalizados(pedido);
+            const pagado = pagos.efectivo + pagos.yape + pagos.recibos + pagos.valesFISE;
+            const total = +pedido.total || 0;
+            const tipo = String(pedido.tipoPago || pedido.estado || '').toLowerCase();
+            if (tipo === 'credito') return +total.toFixed(2);
+            if (tipo === 'mixto') return +Math.max(0, total - pagado).toFixed(2);
+            return 0;
+        }
+
+        function moverMontoCaja(cajaKey, delta) {
+            if (!cajaKey || !delta) return;
+            const caja = Storage.get(cajaKey) || { estado: 'cerrada', montoInicial: 0, montoActual: 0 };
+            if (Array.isArray(caja)) return;
+            caja.montoActual = +Math.max(0, ((+caja.montoActual || 0) + delta)).toFixed(2);
+            Storage.set(cajaKey, caja);
+        }
+
+        function sincronizarCajaDesdePedido(pedidoAnterior, pedidoNuevo) {
+            const oldOwner = obtenerPedidoCajaOwnerUserId(pedidoAnterior);
+            const newOwner = obtenerPedidoCajaOwnerUserId(pedidoNuevo);
+            const oldKey = getCajaKeyByUserId(oldOwner);
+            const newKey = getCajaKeyByUserId(newOwner);
+            const oldMonto = getCajaMovimientoPedido(pedidoAnterior);
+            const newMonto = getCajaMovimientoPedido(pedidoNuevo);
+
+            if (oldKey && newKey && oldKey === newKey) {
+                moverMontoCaja(newKey, +(newMonto - oldMonto).toFixed(2));
+                return;
+            }
+            if (oldKey) moverMontoCaja(oldKey, +(-oldMonto).toFixed(2));
+            if (newKey) moverMontoCaja(newKey, +newMonto.toFixed(2));
+        }
+
+        function sincronizarVentaYCreditoDesdePedido(pedido) {
+            if (!pedido) return;
+            const ventas = Storage.getArray('ventas');
+            const creditos = Storage.getArray('creditos');
+            const ventaMonto = getVentaMontoPedido(pedido);
+            const creditoMonto = getCreditoPendientePedido(pedido);
+            const vi = ventas.findIndex(v => idsIguales(v.pedidoId, pedido.id));
+            const ci = creditos.findIndex(c => idsIguales(c.pedidoId, pedido.id));
+
+            if (ventaMonto > 0) {
+                const ventaData = {
+                    id: vi !== -1 ? ventas[vi].id : generateId(),
+                    pedidoId: pedido.id,
+                    clienteNombre: pedido.clienteNombre,
+                    monto: +ventaMonto.toFixed(2),
+                    pagos: { ...(pedido.pagos || {}) },
+                    fecha: pedido.fecha || getCurrentDateTime()
+                };
+                if (vi !== -1) ventas[vi] = { ...ventas[vi], ...ventaData };
+                else ventas.push(ventaData);
+            } else if (vi !== -1) {
+                ventas.splice(vi, 1);
+            }
+            Storage.set('ventas', ventas);
+
+            if (creditoMonto > 0) {
+                const pagadoPrevio = ci !== -1 ? Math.max(0, (+creditos[ci].monto || 0) - (+creditos[ci].saldo || 0)) : 0;
+                const saldoNuevo = Math.max(0, creditoMonto - pagadoPrevio);
+                const tipo = String(pedido.tipoPago || pedido.estado || '').toLowerCase();
+                const creditoData = {
+                    id: ci !== -1 ? creditos[ci].id : generateId(),
+                    clienteId: pedido.clienteId,
+                    clienteNombre: pedido.clienteNombre,
+                    pedidoId: pedido.id,
+                    monto: +creditoMonto.toFixed(2),
+                    saldo: +saldoNuevo.toFixed(2),
+                    descripcion: tipo === 'credito' ? 'Pedido al crédito' : 'Saldo pendiente de pedido mixto',
+                    pagos: ci !== -1 ? (creditos[ci].pagos || []) : [],
+                    estado: saldoNuevo > 0 ? 'pendiente' : 'pagado',
+                    fecha: ci !== -1 ? (creditos[ci].fecha || pedido.fecha || getCurrentDateTime()) : (pedido.fecha || getCurrentDateTime()),
+                    usuario: pedido.usuario || currentUser?.nombre || ''
+                };
+                if (ci !== -1) creditos[ci] = { ...creditos[ci], ...creditoData };
+                else creditos.push(creditoData);
+            } else if (ci !== -1) {
+                creditos.splice(ci, 1);
+            }
+            Storage.set('creditos', creditos);
+        }
+
+        function quitarPrestamoPedidoDeFierrosYClientes(pedidoId) {
+            if (pedidoId === undefined || pedidoId === null) return;
+            const fierros = Storage.getArray('fierrosMeDeben').filter(r => {
+                const matchNotas = String(r?.notas || '').match(/Pedido\s*#\s*([^\s]+)/i);
+                const refId = r?.pedidoId ?? (matchNotas ? matchNotas[1] : null);
+                return !idsIguales(refId, pedidoId);
+            });
+            Storage.set('fierrosMeDeben', fierros);
+
+            const clientes = Storage.getArray('clientes');
+            let changed = false;
+            clientes.forEach(cli => {
+                const historial = Array.isArray(cli.historialBalonesVacios) ? cli.historialBalonesVacios : [];
+                let removed = false;
+                const restante = [];
+                historial.forEach(h => {
+                    if (h && h.origen === 'pedido' && idsIguales(h.pedidoId, pedidoId)) {
+                        cli.balonesVacios = cli.balonesVacios || { b10: 0, b5: 0, b45: 0 };
+                        cli.balonesVacios.b10 = Math.max(0, (+cli.balonesVacios.b10 || 0) - (+h.b10 || 0));
+                        cli.balonesVacios.b5  = Math.max(0, (+cli.balonesVacios.b5 || 0) - (+h.b5 || 0));
+                        cli.balonesVacios.b45 = Math.max(0, (+cli.balonesVacios.b45 || 0) - (+h.b45 || 0));
+                        removed = true;
+                        changed = true;
+                    } else {
+                        restante.push(h);
+                    }
+                });
+                if (removed) cli.historialBalonesVacios = restante;
+            });
+            if (changed) Storage.set('clientes', clientes);
+        }
+
+        function aplicarPrestamoPedidoAFierrosYClientes(pedido) {
+            if (!pedido) return;
+            const pr = pedido.cilindrosPrestados || {};
+            const p10 = parseInt(pr.b10) || 0;
+            const p5 = parseInt(pr.b5) || 0;
+            const p45 = parseInt(pr.b45) || 0;
+            if (p10 <= 0 && p5 <= 0 && p45 <= 0) return;
+
+            const lista = Storage.getArray('fierrosMeDeben');
+            const fechaHoy = getCurrentDate();
+            const mapaTipo = { c10: p10, c5: p5, c45: p45 };
+            Object.entries(mapaTipo).forEach(([tipo, cant]) => {
+                if (cant > 0) {
+                    lista.push({
+                        id: generateId(),
+                        pedidoId: pedido.id,
+                        fecha: fechaHoy,
+                        tipo,
+                        tercero: pedido.clienteNombre,
+                        direccion: pedido.clienteDireccion || '',
+                        cantidad: cant,
+                        devueltos: 0,
+                        estado: 'pendiente',
+                        notas: `Pedido #${pedido.id}`,
+                        usuario: pedido.usuario || currentUser?.nombre || '',
+                        usuarioId: pedido.usuarioId || currentUser?.id || null,
+                        trabajadorId: pedido.trabajadorId || null,
+                        trabajadorNombre: pedido.trabajadorNombre || ''
+                    });
+                }
+            });
+            Storage.set('fierrosMeDeben', lista);
+
+            const clientes = Storage.getArray('clientes');
+            const cli = clientes.find(c => idsIguales(c.id, pedido.clienteId)) || clientes.find(c => (c.nombre || '').toLowerCase() === (pedido.clienteNombre || '').toLowerCase());
+            if (cli) {
+                if (!cli.balonesVacios) cli.balonesVacios = { b10: 0, b5: 0, b45: 0 };
+                if (!cli.historialBalonesVacios) cli.historialBalonesVacios = [];
+                cli.balonesVacios.b10 += p10;
+                cli.balonesVacios.b5  += p5;
+                cli.balonesVacios.b45 += p45;
+                cli.historialBalonesVacios.push({
+                    tipo: 'entrega',
+                    b10: p10, b5: p5, b45: p45,
+                    fecha: getCurrentDateTime(),
+                    usuario: pedido.usuario || currentUser?.nombre || '',
+                    usuarioId: pedido.usuarioId || currentUser?.id || null,
+                    trabajadorId: pedido.trabajadorId || null,
+                    trabajadorNombre: pedido.trabajadorNombre || '',
+                    trabajadorCodigo: pedido.trabajadorCodigo || '',
+                    pedidoId: pedido.id,
+                    origen: 'pedido'
+                });
+                Storage.set('clientes', clientes);
+            }
+        }
+
+        function sincronizarPrestamoBalonesPedido(pedidoAnterior, pedidoNuevo) {
+            const pedidoId = pedidoNuevo?.id ?? pedidoAnterior?.id;
+            quitarPrestamoPedidoDeFierrosYClientes(pedidoId);
+            if (pedidoNuevo) aplicarPrestamoPedidoAFierrosYClientes(pedidoNuevo);
+        }
+
+        function buscarCierreAfectadoPorPedido(pedido) {
+            if (!pedido) return { cierres: [], cierreAfectado: null };
+            const fechaPedido = pedido.fecha || '';
+            const cierres = Storage.getArray('cierresCaja');
+            let cierreAfectado = null;
+            for (const c of cierres) {
+                const apertura = (c.fechaApertura || c.fecha || '').substring(0,16);
+                const cierre   = (c.fecha || '').substring(0,16);
+                const fp       = fechaPedido.substring(0,16);
+                if (fp >= apertura && fp <= cierre) { cierreAfectado = c; break; }
+            }
+            if (!cierreAfectado && cierres.length) {
+                const sorted = cierres.slice().sort((a,b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+                cierreAfectado = sorted.find(c => (c.fecha || '') >= fechaPedido) || sorted[0];
+            }
+            return { cierres, cierreAfectado };
+        }
+
+        function refrescarModulosVinculadosPedido() {
+            if (typeof updateDashboard === 'function') updateDashboard();
+            if (_activeModule === 'pedidos') renderPedidos();
+            if (_activeModule === 'creditos' && typeof renderCreditos === 'function') renderCreditos();
+            if (_activeModule === 'cierreCaja' && typeof renderCierreCaja === 'function') renderCierreCaja();
+            if (_activeModule === 'fierros' && typeof renderFierros === 'function') renderFierros();
+            if (_activeModule === 'clientes' && typeof renderClientes === 'function') renderClientes();
+        }
+
         function renderPedidos() {
+
             const todosPedidos = Storage.getArray('pedidos');
             const pedidos = getPedidosPropios(todosPedidos);
             const esAdmin = currentUser?.role === 'admin';
@@ -11658,7 +11932,8 @@ th, td,
             if (!pedidos.length) return '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">Sin pedidos</td></tr>';
             return pedidos.slice().reverse().map(p => {
                 const esAdmin = currentUser?.role === 'admin' || currentUser?.role === 'recepcionista';
-                const puedeEditarPedido = esAdmin || (currentUser?.role === 'vendedor' && p.vendedorAsignadoId === currentUser?.id);
+                const puedeEditarPedido = usuarioPuedeGestionarPedido(p);
+                const puedeEliminarPedido = usuarioPuedeGestionarPedido(p);
                 const colorEstado = p.estado === 'pendiente' ? '#fff3e0' : p.estado === 'aceptado' ? '#e3f2fd' : p.estado === 'entregado' || p.estado === 'completado' ? '#e8f5e9' : p.estado === 'credito' ? '#fff3e0' : '#f5f5f5';
                 const txtEstado = p.estado === 'pendiente' ? '#e65100' : p.estado === 'aceptado' ? '#1565c0' : p.estado === 'entregado' || p.estado === 'completado' ? '#2d5016' : p.estado === 'credito' ? '#e65100' : '#666';
                 const badgePago = p.tipoPago === 'credito' ? '<span style="padding:3px 8px;background:#fff3e0;color:#e65100;border-radius:8px;font-size:12px;font-weight:700;">📋 CRÉDITO</span>' : p.tipoPago === 'mixto' ? '<span style="padding:3px 8px;background:#e3f2fd;color:#1565c0;border-radius:8px;font-size:12px;font-weight:700;">🔄 MIXTO</span>' : p.tipoPago === 'pendiente' ? '<span style="padding:3px 8px;background:#f3e5f5;color:#7b1fa2;border-radius:8px;font-size:12px;font-weight:700;">📞 TELEFÓNICO</span>' : '<span style="padding:3px 8px;background:#e8f5e9;color:#2d5016;border-radius:8px;font-size:12px;font-weight:700;">💵 NORMAL</span>';
@@ -11676,7 +11951,7 @@ th, td,
                     <td style="white-space:nowrap;">
                         <button onclick="verDetallePedido(${p.id})" class="btn btn-info" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">👁 Ver</button>
                         ${puedeEditarPedido ? `<button onclick="editarPedido(${p.id})" class="btn btn-warning" style="padding:5px 10px;font-size:12px;margin-bottom:3px;">✏️ Editar</button>` : ''}
-                        ${esAdmin ? `<button onclick="eliminarPedido(${p.id})" class="btn btn-danger" style="padding:5px 10px;font-size:12px;">🗑 Eliminar</button>` : ''}
+                        ${puedeEliminarPedido ? `<button onclick="eliminarPedido(${p.id})" class="btn btn-danger" style="padding:5px 10px;font-size:12px;">🗑 Eliminar</button>` : ''}
                     </td>
                 </tr>`;
             }).join('');
@@ -11767,19 +12042,40 @@ th, td,
         }
 
         function eliminarPedido(id) {
+            const pedidos = Storage.getArray('pedidos');
+            const idx = pedidos.findIndex(p => idsIguales(p.id, id));
+            if (idx === -1) return;
+            const pedidoAnterior = JSON.parse(JSON.stringify(pedidos[idx]));
+            if (!usuarioPuedeGestionarPedido(pedidoAnterior)) {
+                showNotification('No tienes permiso para eliminar este pedido', 'error');
+                return;
+            }
             if (!confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')) return;
-            // Obtener venta y crédito asociados antes de borrar
-            const ventas = Storage.getArray('ventas');
-            const creditos = Storage.getArray('creditos');
-            const ventaAsoc = ventas.find(v => v.pedidoId === id);
-            const creditoAsoc = creditos.find(c => c.pedidoId === id);
-            // Eliminar pedido, venta y crédito usando deleteItem (borra en Firebase individualmente)
-            Storage.deleteItem('pedidos', id);
-            if (ventaAsoc) Storage.deleteItem('ventas', ventaAsoc.id);
-            if (creditoAsoc) Storage.deleteItem('creditos', creditoAsoc.id);
+
+            sincronizarCajaDesdePedido(pedidoAnterior, null);
+            sincronizarPrestamoBalonesPedido(pedidoAnterior, null);
+
+            pedidos.splice(idx, 1);
+            Storage.set('pedidos', pedidos);
+            Storage.set('ventas', Storage.getArray('ventas').filter(v => !idsIguales(v.pedidoId, id)));
+            Storage.set('creditos', Storage.getArray('creditos').filter(c => !idsIguales(c.pedidoId, id)));
             recalcularTodoElStockDesdeIngresos(true);
+
+            const { cierres, cierreAfectado } = buscarCierreAfectadoPorPedido(pedidoAnterior);
+            if (cierreAfectado) {
+                if (!cierreAfectado.pedidosEliminados) cierreAfectado.pedidosEliminados = [];
+                cierreAfectado.pedidosEliminados.push({
+                    pedidoId: id,
+                    fecha: getCurrentDateTime(),
+                    cliente: pedidoAnterior.clienteNombre || '',
+                    editor: currentUser?.nombre || 'Sistema',
+                    totalAnterior: +pedidoAnterior.total || 0
+                });
+                Storage.set('cierresCaja', cierres);
+            }
+
             showNotification('✅ Pedido eliminado', 'success');
-            renderPedidos();
+            refrescarModulosVinculadosPedido();
         }
 
         window._epItems = [];
@@ -11838,7 +12134,7 @@ th, td,
         function editarPedido(id) {
             const p = Storage.getArray('pedidos').find(x => x.id === id);
             if (!p) return;
-            const puedeEditar = currentUser?.role === 'admin' || currentUser?.role === 'recepcionista' || (currentUser?.role === 'vendedor' && p.vendedorAsignadoId === currentUser?.id);
+            const puedeEditar = usuarioPuedeGestionarPedido(p);
             if (!puedeEditar) { showNotification('No tienes permiso para editar este pedido', 'error'); return; }
             window._epItems = (p.items||[]).map(i => ({...i}));
             const trabajadores = Storage.getArray('trabajadores').filter(t => t && t.estado !== 'inactivo');
@@ -11949,9 +12245,11 @@ th, td,
 
         function guardarEdicionPedido(id) {
             const pedidos = Storage.getArray('pedidos');
-            const idx = pedidos.findIndex(p => p.id === id);
+            const idx = pedidos.findIndex(p => idsIguales(p.id, id));
             if (idx === -1) return;
             const p = pedidos[idx];
+            if (!usuarioPuedeGestionarPedido(p)) { showNotification('No tienes permiso para editar este pedido', 'error'); return; }
+            const pedidoAnterior = JSON.parse(JSON.stringify(p));
             const nuevoCliente = document.getElementById('epCliente').value.trim();
             if (!nuevoCliente) { showNotification('El nombre del cliente es obligatorio', 'error'); return; }
             if (window._epItems.length === 0) { showNotification('El pedido debe tener al menos un producto', 'error'); return; }
@@ -11959,8 +12257,8 @@ th, td,
             const opt = sel.options[sel.selectedIndex];
             const fechaVal = document.getElementById('epFecha').value;
             const nuevaFecha = fechaVal ? fechaVal.replace('T',' ') : p.fecha;
-            const nuevoTotal = window._epItems.reduce((s,item) => s+(item.precio*item.cantidad), 0);
-            const totalAnterior = p.total;
+            const nuevoTotal = window._epItems.reduce((s,item) => s + (item.precio * item.cantidad), 0);
+            const totalAnterior = +p.total || 0;
             const nuevoPagos = {
                 efectivo:  parseFloat(document.getElementById('epEfectivo').value)  || 0,
                 yape:      parseFloat(document.getElementById('epYape').value)      || 0,
@@ -11968,7 +12266,7 @@ th, td,
                 valesFISE: parseFloat(document.getElementById('epValesFISE').value) || 0,
             };
             p.clienteNombre = nuevoCliente;
-            p.items         = window._epItems.map(i => ({...i}));
+            p.items         = window._epItems.map(i => ({ ...i }));
             p.total         = nuevoTotal;
             p.estado        = document.getElementById('epEstado').value;
             p.tipoPago      = p.estado;
@@ -11989,49 +12287,36 @@ th, td,
                 p.trabajadorNombre = opt.dataset.nombre;
                 p.trabajadorCodigo = opt.dataset.codigo || '';
             } else {
-                p.trabajadorId = null; p.trabajadorNombre = ''; p.trabajadorCodigo = '';
+                p.trabajadorId = null;
+                p.trabajadorNombre = '';
+                p.trabajadorCodigo = '';
             }
             Storage.set('pedidos', pedidos);
             recalcularTodoElStockDesdeIngresos(true);
-            // Actualizar venta
-            const ventas = Storage.getArray('ventas');
-            const vi = ventas.findIndex(v => v.pedidoId === id);
-            if (vi !== -1) { ventas[vi].monto = nuevoTotal; Storage.set('ventas', ventas); }
-            // Actualizar crédito
-            const creditos = Storage.getArray('creditos');
-            const ci = creditos.findIndex(c => c.pedidoId === id);
-            if (ci !== -1) {
-                const diff = nuevoTotal - totalAnterior;
-                creditos[ci].monto = nuevoTotal;
-                creditos[ci].saldo = Math.max(0, (creditos[ci].saldo||0) + diff);
-                Storage.set('creditos', creditos);
-            }
-            // Marcar cierre de caja
-            const fechaPedido = p.fecha || '';
-            const cierres = Storage.getArray('cierresCaja');
-            let cierreAfectado = null;
-            for (const c of cierres) {
-                const apertura = (c.fechaApertura||c.fecha||'').substring(0,16);
-                const cierre   = (c.fecha||'').substring(0,16);
-                const fp       = fechaPedido.substring(0,16);
-                if (fp >= apertura && fp <= cierre) { cierreAfectado = c; break; }
-            }
-            if (!cierreAfectado && cierres.length) {
-                const sorted = cierres.slice().sort((a,b) => b.fecha.localeCompare(a.fecha));
-                cierreAfectado = sorted.find(c => (c.fecha||'') >= fechaPedido) || sorted[0];
-            }
+            sincronizarVentaYCreditoDesdePedido(p);
+            sincronizarCajaDesdePedido(pedidoAnterior, p);
+            sincronizarPrestamoBalonesPedido(pedidoAnterior, p);
+
+            const { cierres, cierreAfectado } = buscarCierreAfectadoPorPedido(p);
             if (cierreAfectado) {
                 if (!cierreAfectado.pedidosEditados) cierreAfectado.pedidosEditados = [];
                 cierreAfectado.pedidosEditados.push({
-                    pedidoId: id, fecha: getCurrentDateTime(),
-                    cliente: nuevoCliente, editor: currentUser?.nombre||'Admin',
-                    totalAnterior, totalNuevo: nuevoTotal
+                    pedidoId: id,
+                    fecha: getCurrentDateTime(),
+                    cliente: nuevoCliente,
+                    editor: currentUser?.nombre || 'Admin',
+                    totalAnterior,
+                    totalNuevo: nuevoTotal,
+                    cajaAnterior: getCajaMovimientoPedido(pedidoAnterior),
+                    cajaNueva: getCajaMovimientoPedido(p),
+                    creditoAnterior: getCreditoPendientePedido(pedidoAnterior),
+                    creditoNuevo: getCreditoPendientePedido(p)
                 });
                 Storage.set('cierresCaja', cierres);
             }
             cerrarModal('modalEditarPedido');
             showNotification('✅ Pedido actualizado correctamente', 'success');
-            renderPedidos();
+            refrescarModulosVinculadosPedido();
         }
 
         // ==================== UTILIDADES GENERALES ====================
